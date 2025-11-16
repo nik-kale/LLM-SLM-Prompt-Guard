@@ -1,0 +1,10 @@
+{"id": 1, "text": "Hi, I'm John Smith and my email is john.smith@example.com", "expected_pii": ["PERSON", "EMAIL"], "category": "basic"}
+{"id": 2, "text": "Please call me at 555-123-4567 or email jane.doe@company.org", "expected_pii": ["PHONE", "EMAIL"], "category": "contact"}
+{"id": 3, "text": "My SSN is 123-45-6789 and my credit card is 4532 1234 5678 9010", "expected_pii": ["SSN", "CREDIT_CARD"], "category": "sensitive"}
+{"id": 4, "text": "The server is accessible at 192.168.1.100", "expected_pii": ["IP_ADDRESS"], "category": "technical"}
+{"id": 5, "text": "Contact Sarah Johnson at sarah.j@example.com or 555-987-6543", "expected_pii": ["PERSON", "EMAIL", "PHONE"], "category": "multi"}
+{"id": 6, "text": "My account number is 123456789 and routing number is 987654321", "expected_pii": [], "category": "financial", "note": "Account numbers not yet supported"}
+{"id": 7, "text": "Hello, this is a message without any PII", "expected_pii": [], "category": "clean"}
+{"id": 8, "text": "Dr. Michael Brown's office: mike.brown@healthcare.com, 555-234-5678", "expected_pii": ["PERSON", "EMAIL", "PHONE"], "category": "healthcare"}
+{"id": 9, "text": "Access token: abc123xyz456 for user admin@system.local", "expected_pii": ["EMAIL"], "category": "security"}
+{"id": 10, "text": "Alice Williams and Bob Jones are meeting at alice.w@corp.com", "expected_pii": ["PERSON", "EMAIL"], "category": "business"}

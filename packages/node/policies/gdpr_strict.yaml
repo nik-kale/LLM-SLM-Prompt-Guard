@@ -1,0 +1,15 @@
+name: gdpr_strict
+description: Strict GDPR-compliant PII masking for EU data protection requirements.
+entities:
+  EMAIL:
+    placeholder: "[EMAIL_{i}]"
+  PHONE:
+    placeholder: "[PHONE_{i}]"
+  PERSON:
+    placeholder: "[PERSON_{i}]"
+  IP_ADDRESS:
+    placeholder: "[IP_{i}]"
+  CREDIT_CARD:
+    placeholder: "[PAYMENT_{i}]"
+  SSN:
+    placeholder: "[ID_{i}]"

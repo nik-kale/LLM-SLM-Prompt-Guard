@@ -1,0 +1,15 @@
+name: slm_local
+description: Optimized for on-device/local SLM usage with minimal overhead and privacy-first approach.
+entities:
+  EMAIL:
+    placeholder: "[EMAIL_{i}]"
+  PHONE:
+    placeholder: "[PHONE_{i}]"
+  PERSON:
+    placeholder: "[USER_{i}]"
+  IP_ADDRESS:
+    placeholder: "[ADDR_{i}]"
+  CREDIT_CARD:
+    placeholder: "[CARD_{i}]"
+  SSN:
+    placeholder: "[ID_{i}]"

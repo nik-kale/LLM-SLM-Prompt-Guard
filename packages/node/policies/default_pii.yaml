@@ -1,0 +1,15 @@
+name: default_pii
+description: Basic PII masking for emails, phone numbers, names, and common identifiers.
+entities:
+  EMAIL:
+    placeholder: "[EMAIL_{i}]"
+  PHONE:
+    placeholder: "[PHONE_{i}]"
+  PERSON:
+    placeholder: "[NAME_{i}]"
+  IP_ADDRESS:
+    placeholder: "[IP_{i}]"
+  CREDIT_CARD:
+    placeholder: "[CC_{i}]"
+  SSN:
+    placeholder: "[SSN_{i}]"
