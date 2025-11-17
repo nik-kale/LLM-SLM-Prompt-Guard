@@ -46,6 +46,9 @@ from .cache import (
     create_cache_key,
 )
 
+# Synthetic data generation
+from .synthetic import SyntheticDataGenerator
+
 # Storage (optional)
 try:
     from .storage.redis_storage import RedisMappingStorage
@@ -130,6 +133,8 @@ __all__ = [
     "RedisCache",
     "CachedPromptGuard",
     "create_cache_key",
+    # Synthetic data
+    "SyntheticDataGenerator",
 ]
 
 # Optional exports
