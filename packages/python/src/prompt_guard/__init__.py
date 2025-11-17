@@ -31,6 +31,12 @@ try:
 except ImportError:
     _ENHANCED_REGEX_AVAILABLE = False
 
+try:
+    from .detectors.spacy_detector import SpacyDetector
+    _SPACY_AVAILABLE = True
+except ImportError:
+    _SPACY_AVAILABLE = False
+
 # Caching
 from .cache import (
     CacheBackend,
@@ -47,6 +53,12 @@ try:
 except ImportError:
     _REDIS_STORAGE_AVAILABLE = False
 
+try:
+    from .storage.postgres_storage import PostgresAuditLogger
+    _POSTGRES_STORAGE_AVAILABLE = True
+except ImportError:
+    _POSTGRES_STORAGE_AVAILABLE = False
+
 # Adapters (optional)
 try:
     from .adapters.langchain_adapter import (
@@ -59,7 +71,42 @@ try:
 except ImportError:
     _LANGCHAIN_AVAILABLE = False
 
-__version__ = "1.0.0"
+try:
+    from .adapters.llamaindex_adapter import (
+        ProtectedQueryEngine,
+        ProtectedChatEngine,
+        create_protected_query_engine,
+        create_protected_chat_engine,
+    )
+    _LLAMAINDEX_AVAILABLE = True
+except ImportError:
+    _LLAMAINDEX_AVAILABLE = False
+
+try:
+    from .adapters.vercel_ai_adapter import (
+        VercelAIAdapter,
+        ProtectedStreamingChat,
+        create_protected_vercel_handler,
+        create_protected_streaming_chat,
+    )
+    _VERCEL_AI_AVAILABLE = True
+except ImportError:
+    _VERCEL_AI_AVAILABLE = False
+
+try:
+    from .adapters.huggingface_adapter import (
+        ProtectedPipeline,
+        ProtectedConversational,
+        ProtectedTextGeneration,
+        create_protected_pipeline,
+        create_protected_conversational,
+        create_protected_text_generation,
+    )
+    _HUGGINGFACE_AVAILABLE = True
+except ImportError:
+    _HUGGINGFACE_AVAILABLE = False
+
+__version__ = "1.1.0"
 __author__ = "LLM-SLM-Prompt-Guard Contributors"
 __license__ = "MIT"
 
@@ -92,8 +139,14 @@ if _PRESIDIO_AVAILABLE:
 if _ENHANCED_REGEX_AVAILABLE:
     __all__.extend(["EnhancedRegexDetector"])
 
+if _SPACY_AVAILABLE:
+    __all__.extend(["SpacyDetector"])
+
 if _REDIS_STORAGE_AVAILABLE:
     __all__.extend(["RedisMappingStorage"])
+
+if _POSTGRES_STORAGE_AVAILABLE:
+    __all__.extend(["PostgresAuditLogger"])
 
 if _LANGCHAIN_AVAILABLE:
     __all__.extend([
@@ -101,6 +154,32 @@ if _LANGCHAIN_AVAILABLE:
         "ProtectedChatLLM",
         "create_protected_llm",
         "create_protected_chat",
+    ])
+
+if _LLAMAINDEX_AVAILABLE:
+    __all__.extend([
+        "ProtectedQueryEngine",
+        "ProtectedChatEngine",
+        "create_protected_query_engine",
+        "create_protected_chat_engine",
+    ])
+
+if _VERCEL_AI_AVAILABLE:
+    __all__.extend([
+        "VercelAIAdapter",
+        "ProtectedStreamingChat",
+        "create_protected_vercel_handler",
+        "create_protected_streaming_chat",
+    ])
+
+if _HUGGINGFACE_AVAILABLE:
+    __all__.extend([
+        "ProtectedPipeline",
+        "ProtectedConversational",
+        "ProtectedTextGeneration",
+        "create_protected_pipeline",
+        "create_protected_conversational",
+        "create_protected_text_generation",
     ])
 
 
@@ -122,4 +201,23 @@ def list_detectors() -> dict[str, bool]:
         "regex": True,
         "enhanced_regex": _ENHANCED_REGEX_AVAILABLE,
         "presidio": _PRESIDIO_AVAILABLE,
+        "spacy": _SPACY_AVAILABLE,
+    }
+
+
+def list_storage_backends() -> dict[str, bool]:
+    """List available storage backends and their availability."""
+    return {
+        "redis": _REDIS_STORAGE_AVAILABLE,
+        "postgres": _POSTGRES_STORAGE_AVAILABLE,
+    }
+
+
+def list_adapters() -> dict[str, bool]:
+    """List available framework adapters and their availability."""
+    return {
+        "langchain": _LANGCHAIN_AVAILABLE,
+        "llamaindex": _LLAMAINDEX_AVAILABLE,
+        "vercel_ai": _VERCEL_AI_AVAILABLE,
+        "huggingface": _HUGGINGFACE_AVAILABLE,
     }

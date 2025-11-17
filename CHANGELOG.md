@@ -5,6 +5,171 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-11-17
+
+### 🚀 Feature Release - Extended Ecosystem & Testing
+
+This release adds comprehensive testing, additional detectors, more framework integrations,
+and expands the ecosystem with Vercel AI and Hugging Face support.
+
+### Added
+
+#### Testing & Quality Assurance
+
+- **Comprehensive Integration Tests** (`tests/integration/test_adapters.py`)
+  - LangChain adapter integration tests
+  - LlamaIndex adapter integration tests
+  - Async guard integration tests
+  - Caching integration tests
+  - Redis storage integration tests
+  - Enhanced regex detector tests
+  - Policy validation tests
+  - End-to-end workflow tests
+
+- **Performance Benchmarks** (`tests/performance/test_benchmarks.py`)
+  - Detector performance benchmarks across text sizes
+  - Caching performance tests
+  - Batch processing benchmarks
+  - Async operation performance tests
+  - Memory usage profiling
+  - Latency distribution analysis (P50/P95/P99)
+  - Throughput testing (sequential and concurrent)
+
+- **Security Tests** (`tests/security/test_security.py`)
+  - Input validation and special character handling
+  - ReDoS (Regular Expression Denial of Service) resistance
+  - Data leakage prevention tests
+  - Cache security validation
+  - Storage security tests
+  - Compliance requirement validation
+  - Side-channel attack prevention
+  - Error handling security
+
+#### New Detectors
+
+- **spaCy Detector** (`detectors/spacy_detector.py`)
+  - ML-based NER using spaCy
+  - Support for 15+ entity types (PERSON, ORG, GPE, etc.)
+  - Multi-language support (10+ languages)
+  - Configurable confidence thresholds
+  - Performance-optimized pipeline
+  - Simpler alternative to Presidio for basic ML detection
+
+#### New Framework Integrations
+
+- **LlamaIndex Adapter** (`adapters/llamaindex_adapter.py`)
+  - `ProtectedQueryEngine` for RAG applications
+  - `ProtectedChatEngine` for conversational AI
+  - Async support for high-performance applications
+  - Streaming support
+  - Session-based conversation management
+  - Helper functions for easy integration
+
+- **Vercel AI SDK Adapter** (`adapters/vercel_ai_adapter.py`)
+  - `VercelAIAdapter` for message protection
+  - `ProtectedStreamingChat` for streaming responses
+  - Function call argument protection
+  - Multi-turn conversation support
+  - Helper factory functions
+
+- **Hugging Face Adapter** (`adapters/huggingface_adapter.py`)
+  - `ProtectedPipeline` for any HF pipeline
+  - `ProtectedConversational` for chat models
+  - `ProtectedTextGeneration` for model.generate()
+  - Support for all pipeline tasks (text-generation, summarization, translation, etc.)
+  - Batch processing support
+
+#### Storage & Audit
+
+- **PostgreSQL Audit Logger** (`storage/postgres_storage.py`)
+  - ACID-compliant audit logging
+  - Session management with TTL
+  - PII mapping persistence
+  - Audit trail logging
+  - Detection statistics and analytics
+  - Compliance reporting
+  - Advanced querying and filtering
+  - Automatic cleanup of expired data
+  - Schema management
+
+#### Examples & Documentation
+
+- **spaCy Detector Examples** (`examples/spacy_detector_example.py`)
+  - Basic spaCy usage
+  - Combined spaCy + regex detection
+  - Custom confidence thresholds
+  - Multi-language detection
+  - Performance comparison with regex
+
+- **LlamaIndex Integration Examples** (`examples/llamaindex_integration_example.py`)
+  - Protected query engine usage
+  - Multi-turn chat engine
+  - Async operations
+  - Custom policies (HIPAA, PCI-DSS)
+  - Redis storage integration
+
+- **PostgreSQL Audit Logging Examples** (`examples/postgres_audit_logging_example.py`)
+  - Basic audit logging setup
+  - HIPAA compliance logging
+  - Compliance reporting
+  - Session lifecycle management
+  - Advanced queries and analytics
+
+- **Multi-language Examples** (`examples/multilanguage_example.py`)
+  - English, Spanish, French, German, Italian support
+  - Presidio multi-language usage
+  - Mixed-language text handling
+  - Language-specific policies (GDPR, HIPAA)
+  - Translation-safe anonymization
+
+### Improved
+
+- **Package Structure**: Better organization of optional dependencies
+- **Type Safety**: Enhanced type hints across all new modules
+- **Error Handling**: Comprehensive error handling in all adapters
+- **Documentation**: Extensive inline documentation and examples
+- **Helper Functions**: New utility functions for listing available components:
+  - `list_storage_backends()` - Check storage backend availability
+  - `list_adapters()` - Check framework adapter availability
+
+### Testing Coverage
+
+- Unit tests: Core functionality
+- Integration tests: Cross-component interactions
+- Performance tests: Benchmarking and profiling
+- Security tests: Vulnerability prevention
+- End-to-end tests: Complete workflows
+
+### Migration Guide
+
+From 1.0.0 to 1.1.0:
+
+```python
+# All 1.0.0 code continues to work unchanged
+
+# New features in 1.1.0:
+
+# spaCy detector
+from prompt_guard import SpacyDetector
+guard = PromptGuard(detectors=["spacy"])
+
+# LlamaIndex integration
+from prompt_guard.adapters import create_protected_query_engine
+protected_engine = create_protected_query_engine(query_engine, guard)
+
+# Hugging Face integration
+from prompt_guard.adapters import create_protected_pipeline
+protected_pipe = create_protected_pipeline(pipeline, guard)
+
+# PostgreSQL audit logging
+from prompt_guard.storage import PostgresAuditLogger
+logger = PostgresAuditLogger(connection_string="postgresql://...")
+```
+
+Fully backward compatible - no breaking changes!
+
+---
+
 ## [1.0.0] - 2025-11-16
 
 ### 🎉 Major Release - Enterprise-Ready

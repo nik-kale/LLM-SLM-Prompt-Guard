@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-slm-prompt-guard"
-version = "1.0.0"
+version = "1.1.0"
 description = "Enterprise-grade PII anonymization & de-anonymization for LLM/SLM apps."
 authors = [{ name = "LLM-SLM-Prompt-Guard Contributors", email = "you@example.com" }]
 readme = "README.md"
@@ -26,15 +26,23 @@ dev = [
     "ruff>=0.1.0",
 ]
 
-# ML-based detector
+# ML-based detectors
 presidio = [
     "presidio-analyzer>=2.2.0",
+    "spacy>=3.0.0",
+]
+
+spacy = [
     "spacy>=3.0.0",
 ]
 
 # Storage backends
 redis = [
     "redis>=5.0.0",
+]
+
+postgres = [
+    "psycopg2-binary>=2.9.0",
 ]
 
 # Framework integrations
@@ -68,6 +76,7 @@ all = [
     "presidio-analyzer>=2.2.0",
     "spacy>=3.0.0",
     "redis>=5.0.0",
+    "psycopg2-binary>=2.9.0",
     "langchain>=0.1.0",
     "llama-index>=0.9.0",
     "fastapi>=0.104.0",
