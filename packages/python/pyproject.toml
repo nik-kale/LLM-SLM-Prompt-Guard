@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-slm-prompt-guard"
-version = "0.1.0"
-description = "Policy-driven PII anonymization & de-anonymization for LLM/SLM apps."
-authors = [{ name = "Your Name", email = "you@example.com" }]
+version = "1.0.0"
+description = "Enterprise-grade PII anonymization & de-anonymization for LLM/SLM apps."
+authors = [{ name = "LLM-SLM-Prompt-Guard Contributors", email = "you@example.com" }]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
@@ -15,16 +15,65 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Development dependencies
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-benchmark>=4.0",
     "black>=23.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
 ]
+
+# ML-based detector
+presidio = [
+    "presidio-analyzer>=2.2.0",
+    "spacy>=3.0.0",
+]
+
+# Storage backends
+redis = [
+    "redis>=5.0.0",
+]
+
+# Framework integrations
+langchain = [
+    "langchain>=0.1.0",
+]
+
+llamaindex = [
+    "llama-index>=0.9.0",
+]
+
+# HTTP Proxy
+proxy = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "httpx>=0.25.0",
+    "redis>=5.0.0",
+    "prometheus-client>=0.19.0",
+]
+
+# Examples
 examples = [
     "fastapi>=0.104.0",
     "uvicorn>=0.24.0",
     "openai>=1.0.0",
+    "ollama>=0.1.0",
+]
+
+# All optional dependencies
+all = [
+    "presidio-analyzer>=2.2.0",
+    "spacy>=3.0.0",
+    "redis>=5.0.0",
+    "langchain>=0.1.0",
+    "llama-index>=0.9.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "httpx>=0.25.0",
+    "prometheus-client>=0.19.0",
 ]
 
 [project.urls]

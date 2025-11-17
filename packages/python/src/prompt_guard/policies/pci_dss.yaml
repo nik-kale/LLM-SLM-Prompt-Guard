@@ -1,0 +1,165 @@
+name: pci_dss
+description: PCI-DSS compliant cardholder data protection for payment processing applications.
+version: "1.0"
+compliance: ["PCI-DSS v4.0"]
+
+# PCI-DSS focuses on protecting cardholder data and sensitive authentication data
+entities:
+  # Primary Account Number (PAN) - CRITICAL
+  CREDIT_CARD:
+    placeholder: "[PAN_{i}]"
+    description: "Primary Account Number (credit/debit card number)"
+    sensitivity: "critical"
+    mask_strategy: "truncate_middle"  # Show first 6 and last 4 only
+    max_display_digits: 10
+
+  # Cardholder Name
+  PERSON:
+    placeholder: "[CARDHOLDER_{i}]"
+    description: "Cardholder name"
+    sensitivity: "high"
+
+  # Service Code
+  SERVICE_CODE:
+    placeholder: "[SC_{i}]"
+    description: "3-4 digit service code"
+    sensitivity: "high"
+
+  # Expiration Date
+  CARD_EXPIRY:
+    placeholder: "[EXP_{i}]"
+    description: "Card expiration date"
+    sensitivity: "medium"
+
+  # Sensitive Authentication Data (SAD) - MUST NEVER BE STORED
+  CVV:
+    placeholder: "[REDACTED]"
+    description: "Card Verification Value/Code (CVV/CVC/CVV2/CVC2)"
+    sensitivity: "critical"
+    mask_strategy: "full_redact"
+    storage_allowed: false
+
+  PIN:
+    placeholder: "[REDACTED]"
+    description: "Personal Identification Number"
+    sensitivity: "critical"
+    mask_strategy: "full_redact"
+    storage_allowed: false
+
+  MAGNETIC_STRIPE:
+    placeholder: "[REDACTED]"
+    description: "Full magnetic stripe data"
+    sensitivity: "critical"
+    mask_strategy: "full_redact"
+    storage_allowed: false
+
+  # Supporting Information
+  EMAIL:
+    placeholder: "[EMAIL_{i}]"
+    description: "Email address"
+    sensitivity: "medium"
+
+  PHONE:
+    placeholder: "[PHONE_{i}]"
+    description: "Phone number"
+    sensitivity: "medium"
+
+  # Billing Address
+  LOCATION:
+    placeholder: "[ADDR_{i}]"
+    description: "Billing/shipping address"
+    sensitivity: "medium"
+
+  SSN:
+    placeholder: "[SSN_{i}]"
+    description: "Social Security Number (if collected)"
+    sensitivity: "critical"
+
+  # Transaction Information
+  TRANSACTION_ID:
+    placeholder: "[TXN_{i}]"
+    description: "Transaction identifier"
+    sensitivity: "low"
+
+  # IP Addresses (for fraud detection context)
+  IP_ADDRESS:
+    placeholder: "[IP_{i}]"
+    description: "IP address"
+    sensitivity: "low"
+
+# Masking strategies
+strategies:
+  truncate_middle:
+    description: "Show first 6 and last 4 digits of PAN"
+    pattern: "Display only: first 6 + last 4 digits"
+
+  full_redact:
+    description: "Complete redaction - no storage allowed"
+    pattern: "[REDACTED]"
+
+  hash:
+    description: "One-way hash for comparison"
+    algorithm: "SHA-256"
+
+# PCI-DSS specific requirements
+pci_requirements:
+  # Requirement 3: Protect stored cardholder data
+  requirement_3:
+    mask_pan: true
+    render_pan_unreadable: true
+    strong_cryptography: true  # If storing (not recommended)
+
+  # Requirement 4: Encrypt transmission of cardholder data
+  requirement_4:
+    encrypt_transmission: true
+    strong_cryptography: true
+
+  # Requirement 9: Restrict physical access
+  requirement_9:
+    mask_display: true  # Mask PAN when displayed
+
+  # Requirement 10: Track and monitor all access
+  requirement_10:
+    audit_all_access: true
+    log_retention_days: 90  # Minimum 90 days
+
+# Audit configuration
+audit:
+  required: true
+  log_level: "detailed"
+  retain_days: 365  # 1 year minimum
+  log_pan_access: true
+  alert_on_cleartext: true
+
+# Data retention
+retention:
+  max_days: 90  # Don't store cardholder data longer than necessary
+  auto_purge: true
+  exception_approval_required: true
+
+# Additional metadata
+metadata:
+  standard: "PCI DSS v4.0"
+  scope: "Cardholder Data Environment (CDE)"
+  notes: |
+    This policy helps protect cardholder data per PCI-DSS requirements.
+
+    CRITICAL REMINDERS:
+    - CVV/CVV2/CVC2/CID and PIN data MUST NEVER be stored after authorization
+    - PAN must be masked when displayed (first 6 + last 4 max)
+    - Encrypt cardholder data in transit and at rest
+    - Implement strong access controls and monitoring
+
+    This tool assists with PCI-DSS compliance but does not guarantee it.
+    Work with a Qualified Security Assessor (QSA) for certification.
+
+  prohibited_storage:
+    - "Full magnetic stripe data"
+    - "CAV2/CVC2/CVV2/CID"
+    - "PIN/PIN Block"
+
+  allowed_storage:
+    - "PAN (encrypted)"
+    - "Cardholder name"
+    - "Service code"
+    - "Expiration date"

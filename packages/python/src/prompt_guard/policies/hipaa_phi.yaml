@@ -1,0 +1,132 @@
+name: hipaa_phi
+description: HIPAA-compliant Protected Health Information (PHI) masking for healthcare applications.
+version: "1.0"
+compliance: ["HIPAA", "HITECH"]
+
+# HIPAA defines 18 types of PHI identifiers
+entities:
+  # Direct identifiers
+  PERSON:
+    placeholder: "[PATIENT_{i}]"
+    description: "Patient, family member, or household member names"
+    sensitivity: "high"
+
+  EMAIL:
+    placeholder: "[CONTACT_{i}]"
+    description: "Email addresses"
+    sensitivity: "high"
+
+  PHONE:
+    placeholder: "[PHONE_{i}]"
+    description: "Phone and fax numbers"
+    sensitivity: "high"
+
+  # Geographic subdivisions smaller than state
+  LOCATION:
+    placeholder: "[LOC_{i}]"
+    description: "Street address, city, county, ZIP code (first 3 digits ok if area >20,000)"
+    sensitivity: "high"
+
+  # Dates (except year)
+  DOB:
+    placeholder: "[DATE_{i}]"
+    description: "Dates of birth, admission, discharge, death (year alone is ok)"
+    sensitivity: "high"
+
+  DATE_TIME:
+    placeholder: "[DATE_{i}]"
+    description: "Other dates related to individual"
+    sensitivity: "medium"
+
+  # Identification numbers
+  SSN:
+    placeholder: "[ID_{i}]"
+    description: "Social Security Numbers"
+    sensitivity: "critical"
+
+  MRN:
+    placeholder: "[MRN_{i}]"
+    description: "Medical Record Numbers"
+    sensitivity: "critical"
+
+  # Health plan beneficiary numbers
+  HEALTH_PLAN_ID:
+    placeholder: "[PLAN_{i}]"
+    description: "Health plan beneficiary numbers"
+    sensitivity: "high"
+
+  # Account numbers
+  BANK_ACCOUNT:
+    placeholder: "[ACCT_{i}]"
+    description: "Account numbers"
+    sensitivity: "high"
+
+  # Certificate/license numbers
+  DRIVERS_LICENSE:
+    placeholder: "[LIC_{i}]"
+    description: "Driver's license numbers"
+    sensitivity: "high"
+
+  PASSPORT:
+    placeholder: "[PASS_{i}]"
+    description: "Passport numbers"
+    sensitivity: "high"
+
+  # Vehicle identifiers
+  VEHICLE_ID:
+    placeholder: "[VEH_{i}]"
+    description: "Vehicle identifiers and serial numbers, including license plates"
+    sensitivity: "medium"
+
+  # Device identifiers
+  DEVICE_ID:
+    placeholder: "[DEV_{i}]"
+    description: "Device identifiers and serial numbers"
+    sensitivity: "medium"
+
+  # Web URLs
+  URL:
+    placeholder: "[URL_{i}]"
+    description: "Web URLs"
+    sensitivity: "low"
+
+  # IP addresses
+  IP_ADDRESS:
+    placeholder: "[IP_{i}]"
+    description: "IP addresses"
+    sensitivity: "medium"
+
+  # Biometric identifiers
+  BIOMETRIC:
+    placeholder: "[BIO_{i}]"
+    description: "Biometric identifiers (fingerprints, voice prints, etc.)"
+    sensitivity: "critical"
+
+  # Full-face photos
+  PHOTO_REF:
+    placeholder: "[PHOTO_{i}]"
+    description: "References to full-face photographs"
+    sensitivity: "high"
+
+# Masking strategy
+strategy:
+  default: "replace"  # Replace with placeholder
+  fallback: "redact"  # Redact if uncertain
+  preserve_format: false  # Don't preserve original format for PHI
+
+# Audit requirements
+audit:
+  required: true
+  log_level: "detailed"
+  retain_days: 2555  # 7 years (HIPAA requirement)
+
+# Additional metadata
+metadata:
+  regulation: "HIPAA Privacy Rule (45 CFR Part 160 and Subparts A and E of Part 164)"
+  de_identification_method: "Safe Harbor Method"
+  notes: |
+    This policy implements the HIPAA Safe Harbor method for de-identification.
+    All 18 PHI identifiers must be removed to qualify as de-identified data.
+
+    Important: This tool helps with de-identification but does not guarantee
+    HIPAA compliance. Consult with privacy and legal experts.

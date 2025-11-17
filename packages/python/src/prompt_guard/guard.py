@@ -45,10 +45,19 @@ class PromptGuard:
         for name in names:
             if name == "regex":
                 instances.append(RegexDetector())
+            elif name == "presidio":
+                try:
+                    from .detectors.presidio_detector import PresidioDetector
+                    instances.append(PresidioDetector())
+                except ImportError:
+                    raise ValueError(
+                        "Presidio detector is not available. "
+                        "Install it with: pip install presidio-analyzer"
+                    )
             else:
                 raise ValueError(
                     f"Unknown detector backend: {name}. "
-                    f"Currently supported: ['regex']"
+                    f"Currently supported: ['regex', 'presidio']"
                 )
         return instances
 
@@ -136,3 +145,36 @@ class PromptGuard:
         for placeholder, original in mapping.items():
             result = result.replace(placeholder, original)
         return result
+
+    def batch_anonymize(self, texts: List[str]) -> List[AnonymizeResult]:
+        """
+        Anonymize multiple texts in batch.
+
+        Args:
+            texts: List of texts to anonymize
+
+        Returns:
+            List of (anonymized_text, mapping) tuples
+        """
+        return [self.anonymize(text) for text in texts]
+
+    def batch_deanonymize(
+        self, texts: List[str], mappings: List[Mapping]
+    ) -> List[str]:
+        """
+        De-anonymize multiple texts in batch.
+
+        Args:
+            texts: List of texts containing placeholders
+            mappings: List of mappings corresponding to each text
+
+        Returns:
+            List of de-anonymized texts
+        """
+        if len(texts) != len(mappings):
+            raise ValueError("Number of texts and mappings must match")
+
+        return [
+            self.deanonymize(text, mapping)
+            for text, mapping in zip(texts, mappings)
+        ]
