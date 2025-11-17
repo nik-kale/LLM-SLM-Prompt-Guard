@@ -5,6 +5,199 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-11-17
+
+### 🚀 Production-Ready Release - CI/CD, Helm, and Pulumi
+
+This release completes the production infrastructure ecosystem with comprehensive CI/CD pipelines, Kubernetes Helm charts, and Python-based infrastructure as code with Pulumi.
+
+### Added
+
+#### CI/CD & Automation
+
+- **GitHub Actions Workflows** (`.github/workflows/`)
+  - **Test Workflow** (`test.yml`)
+    - Multi-version Python testing (3.9, 3.10, 3.11, 3.12)
+    - Integration tests for all adapters
+    - Performance benchmarks with regression detection
+    - Load testing with Locust and Redis service
+    - Comprehensive test coverage reporting
+
+  - **Lint Workflow** (`lint.yml`)
+    - Python linting with Ruff (formatting + code quality)
+    - Type checking with MyPy
+    - Markdown linting for documentation quality
+    - YAML validation for configuration files
+    - Dockerfile linting with Hadolint
+    - Terraform validation and formatting
+
+  - **Security Workflow** (`security.yml`)
+    - CodeQL semantic code analysis
+    - Snyk dependency vulnerability scanning
+    - Trivy container and filesystem scanning
+    - Bandit Python security linting
+    - Gitleaks secret detection
+    - pip-audit for Python packages
+    - Dependency review for pull requests
+
+  - **Documentation Workflow** (`docs.yml`)
+    - Sphinx documentation build
+    - GitHub Pages deployment
+    - Automatic updates on main branch
+
+  - **Release Workflow** (`release.yml`)
+    - Automated releases on version tags
+    - PyPI package publishing
+    - Multi-architecture Docker images (amd64/arm64)
+    - Docker Hub and GHCR publishing
+    - GitHub release with changelog
+
+- **Pre-commit Hooks** (`.pre-commit-config.yaml`)
+  - Ruff linting and formatting
+  - MyPy type checking
+  - Bandit security scanning
+  - isort import sorting
+  - Markdown linting
+  - YAML linting
+  - Hadolint for Dockerfiles
+  - Terraform formatting
+  - Gitleaks secret scanning
+  - Commitizen for conventional commits
+  - Trailing whitespace and end-of-file fixes
+
+- **Supporting Configuration Files**
+  - `.bandit.yml` - Security scanning rules
+  - `.yamllint.yml` - YAML linting configuration
+  - `.markdown-link-check.json` - Link validation config
+
+#### Kubernetes Deployment
+
+- **Helm Chart** (`deploy/helm/prompt-guard/`)
+  - Production-ready Kubernetes deployment
+  - Auto-scaling (3-10 pods) with HPA
+  - Redis dependency (Bitnami chart)
+  - PostgreSQL dependency (Bitnami chart)
+  - Ingress with TLS support
+  - Network policies for security
+  - Pod disruption budgets for availability
+  - Service accounts and RBAC
+  - Configurable resource limits
+  - Health checks (liveness/readiness probes)
+  - Security contexts (non-root, read-only filesystem)
+  - Comprehensive values.yaml with sensible defaults
+  - Template helpers for reusability
+  - Detailed README with examples
+
+#### Infrastructure as Code
+
+- **Pulumi AWS Infrastructure** (`deploy/pulumi/`)
+  - Complete Python-based IaC for AWS
+  - VPC with 3 availability zones
+  - Public and private subnets
+  - NAT gateways for outbound traffic
+  - Internet gateway for public access
+  - ECS Fargate cluster (serverless containers)
+  - Application Load Balancer with health checks
+  - RDS PostgreSQL (Multi-AZ, automated backups)
+  - ElastiCache Redis (multi-node cluster)
+  - Auto-scaling policies (CPU-based)
+  - Security groups with least-privilege access
+  - CloudWatch log groups for centralized logging
+  - IAM roles and policies
+  - Configurable parameters (region, instance sizes, policies)
+  - Stack outputs for easy reference
+  - Comprehensive README with cost estimates
+
+### Improved
+
+- **Documentation Quality**
+  - Added CI/CD section to main README
+  - Updated roadmap to reflect v1.2.0 completion
+  - Enhanced deployment section with Helm and Pulumi
+  - Added pre-commit hooks documentation
+  - Updated project stats and version badges
+  - Improved quick commands reference
+
+- **Developer Experience**
+  - Automated code quality checks
+  - Pre-commit hooks catch issues before commit
+  - CI/CD provides immediate feedback on PRs
+  - Multiple deployment options for flexibility
+
+- **Production Readiness**
+  - 5 comprehensive CI/CD workflows
+  - 15+ pre-commit hooks
+  - Helm chart for Kubernetes
+  - Choice of Terraform or Pulumi for IaC
+  - Multi-architecture Docker builds
+
+### Infrastructure Comparison
+
+| Feature | Terraform | Pulumi |
+|---------|-----------|--------|
+| Language | HCL | Python |
+| Type Safety | Limited | Full Python types |
+| Learning Curve | New DSL | Use Python skills |
+| IDE Support | Basic | Full IntelliSense |
+| Cost (Production) | ~$234/month | ~$364/month |
+
+### Deployment Options Summary
+
+1. **Docker Compose** - Local development
+2. **Kubernetes (Manual)** - kubectl apply
+3. **Kubernetes (Helm)** - helm install (Recommended for K8s)
+4. **AWS (Terraform)** - terraform apply (Recommended for AWS/HCL users)
+5. **AWS (Pulumi)** - pulumi up (Recommended for AWS/Python users)
+6. **Manual** - Direct Python installation
+
+### CI/CD Workflows Matrix
+
+| Workflow | Triggers | Duration | Key Actions |
+|----------|----------|----------|-------------|
+| Test | Push, PR | ~10-15 min | pytest, benchmarks, load tests |
+| Lint | Push, PR | ~3-5 min | ruff, mypy, markdown, yaml |
+| Security | Push, PR, Schedule | ~8-12 min | CodeQL, Snyk, Trivy, Bandit |
+| Docs | Push to main | ~5-8 min | Sphinx build, Pages deploy |
+| Release | Tag push | ~15-20 min | PyPI, Docker Hub, GHCR |
+
+### Migration Guide
+
+From 1.1.0 to 1.2.0:
+
+```bash
+# Install pre-commit hooks (recommended)
+pip install pre-commit
+pre-commit install
+
+# Deploy with Helm instead of raw manifests
+helm repo add prompt-guard https://nik-kale.github.io/llm-slm-prompt-guard
+helm install my-prompt-guard prompt-guard/prompt-guard
+
+# Or deploy with Pulumi instead of Terraform
+cd deploy/pulumi
+pulumi up
+```
+
+All v1.1.0 code continues to work unchanged - no breaking changes!
+
+### Cost Estimates
+
+#### Helm/Kubernetes
+- Depends on cluster provider and node sizes
+- Example: 3 nodes on GKE/EKS: ~$200-300/month
+
+#### Terraform AWS
+- Production: ~$234/month
+- Development: ~$100/month
+
+#### Pulumi AWS
+- Production: ~$364/month
+- Development: ~$128/month
+
+See deployment READMEs for detailed cost breakdowns.
+
+---
+
 ## [1.1.0] - 2025-11-17
 
 ### 🚀 Feature Release - Extended Ecosystem & Testing

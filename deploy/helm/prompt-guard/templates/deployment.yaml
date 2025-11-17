@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "prompt-guard.fullname" . }}
+  labels:
+    {{- include "prompt-guard.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.proxy.autoscaling.enabled }}
+  replicas: {{ .Values.proxy.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "prompt-guard.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "prompt-guard.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.proxy.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "prompt-guard.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.proxy.securityContext | nindent 8 }}
+      containers:
+        - name: proxy
+          securityContext:
+            {{- toYaml .Values.proxy.containerSecurityContext | nindent 12 }}
+          image: "{{ .Values.proxy.image.repository }}:{{ .Values.proxy.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.proxy.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.proxy.service.targetPort }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.proxy.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.proxy.readinessProbe | nindent 12 }}
+          env:
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_HOST
+              value: {{ include "prompt-guard.redis.fullname" . }}-master
+            {{- end }}
+            {{- toYaml .Values.proxy.env | nindent 12 }}
+          {{- with .Values.proxy.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.proxy.resources | nindent 12 }}
+          {{- with .Values.proxy.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.proxy.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}

@@ -1,0 +1,41 @@
+{{- if .Values.proxy.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "prompt-guard.fullname" . }}
+  labels:
+    {{- include "prompt-guard.labels" . | nindent 4 }}
+  {{- with .Values.proxy.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.proxy.ingress.className }}
+  ingressClassName: {{ .Values.proxy.ingress.className }}
+  {{- end }}
+  {{- if .Values.proxy.ingress.tls }}
+  tls:
+    {{- range .Values.proxy.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.proxy.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "prompt-guard.fullname" $ }}
+                port:
+                  number: {{ $.Values.proxy.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

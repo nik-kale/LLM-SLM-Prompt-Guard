@@ -1,0 +1,171 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  security-python:
+    name: Python Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install bandit safety pip-audit
+
+      - name: Run bandit security scanner
+        run: |
+          cd packages/python
+          bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Run safety check
+        run: |
+          cd packages/python
+          safety check --json --output safety-report.json || true
+
+      - name: Run pip-audit
+        run: |
+          cd packages/python
+          pip-audit --format json --output pip-audit-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-security-reports
+          path: |
+            packages/python/bandit-report.json
+            packages/python/safety-report.json
+            packages/python/pip-audit-report.json
+
+  security-codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      matrix:
+        language: ['python']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  security-snyk:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/python-3.10@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --file=packages/python/pyproject.toml --severity-threshold=high
+
+  security-trivy:
+    name: Trivy Container Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t prompt-guard-proxy:test .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'prompt-guard-proxy:test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  security-dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+
+  security-secrets:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [security-python, security-codeql, security-trivy, security-secrets]
+    if: always()
+
+    steps:
+      - name: Check security scan results
+        run: |
+          echo "🔒 Security Scan Results:"
+          echo ""
+          echo "Python Security: ${{ needs.security-python.result }}"
+          echo "CodeQL Analysis: ${{ needs.security-codeql.result }}"
+          echo "Trivy Container Scan: ${{ needs.security-trivy.result }}"
+          echo "Secret Scanning: ${{ needs.security-secrets.result }}"
+          echo ""
+
+          if [ "${{ needs.security-python.result }}" != "success" ] || \
+             [ "${{ needs.security-codeql.result }}" != "success" ] || \
+             [ "${{ needs.security-secrets.result }}" != "success" ]; then
+            echo "❌ Critical security checks failed"
+            exit 1
+          fi
+
+          echo "✅ All critical security checks passed"

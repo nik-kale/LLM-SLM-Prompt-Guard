@@ -2,10 +2,11 @@
 
 **Enterprise-grade PII anonymization & de-anonymization for LLM/SLM applications.**
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/nik-kale/llm-slm-prompt-guard/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/nik-kale/llm-slm-prompt-guard/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-100%2B%20passing-success.svg)](#testing)
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF.svg)](https://github.com/nik-kale/llm-slm-prompt-guard/actions)
 
 `llm-slm-prompt-guard` is a production-ready library that protects sensitive information (PII) in Large Language Model (LLM) and Small Language Model (SLM) applications through policy-driven detection, anonymization, and de-anonymization.
 
@@ -62,8 +63,10 @@ original = guard.deanonymize(response, mapping)
 - **Translation-Safe**: Placeholders preserved across translations
 
 ### 🏗️ Production Ready
-- **Docker & Kubernetes**: Complete deployment configs
-- **Terraform Infrastructure**: AWS deployment (VPC, ECS, RDS, Redis)
+- **Docker & Kubernetes**: Complete deployment configs with Helm charts
+- **Infrastructure as Code**: Terraform and Pulumi modules for AWS
+- **CI/CD**: GitHub Actions workflows for testing, security, and deployment
+- **Code Quality**: Pre-commit hooks for automated quality checks
 - **Monitoring**: Prometheus metrics, Grafana dashboards
 - **Auto-Scaling**: CPU-based scaling (2-10 instances)
 - **99.9% Uptime**: Multi-AZ, automatic failover
@@ -408,18 +411,29 @@ This starts:
 - Prometheus on port 9090
 - Grafana on port 3000
 
-### Kubernetes
+### Kubernetes with Helm
 
 ```bash
-kubectl apply -f deploy/kubernetes/
+# Add Helm repository
+helm repo add prompt-guard https://nik-kale.github.io/llm-slm-prompt-guard
+helm repo update
+
+# Install chart
+helm install my-prompt-guard prompt-guard/prompt-guard
+
+# Or with custom values
+helm install my-prompt-guard -f values.yaml prompt-guard/prompt-guard
 ```
 
-This creates:
+This deploys:
 - 3 proxy pods (auto-scaling 3-10)
-- Redis cluster
-- PostgreSQL instance
+- Redis cluster (Bitnami chart)
+- PostgreSQL instance (Bitnami chart)
 - Ingress with TLS
 - Horizontal Pod Autoscaler
+- Network policies and security contexts
+
+See [deploy/helm/prompt-guard/README.md](deploy/helm/prompt-guard/README.md) for details.
 
 ### AWS with Terraform
 
@@ -430,16 +444,39 @@ terraform apply
 ```
 
 This deploys:
-- VPC with public/private subnets
-- ECS Fargate cluster
+- VPC with public/private subnets (3 AZs)
+- ECS Fargate cluster (2-10 tasks)
 - Application Load Balancer
 - RDS PostgreSQL (Multi-AZ)
-- ElastiCache Redis
+- ElastiCache Redis (Multi-node)
 - CloudWatch monitoring
 
 **Cost**: ~$234/month for production setup
 
 See [deploy/terraform/README.md](deploy/terraform/README.md) for details.
+
+### AWS with Pulumi (Python)
+
+```bash
+cd deploy/pulumi
+pulumi login
+pulumi stack init production
+pulumi config set aws:region us-east-1
+pulumi config set --secret db-password YourSecurePassword123!
+pulumi up
+```
+
+Same infrastructure as Terraform, but using Python:
+- VPC with public/private subnets (3 AZs)
+- ECS Fargate cluster with auto-scaling
+- Application Load Balancer
+- RDS PostgreSQL (Multi-AZ)
+- ElastiCache Redis cluster
+- CloudWatch logging and monitoring
+
+**Cost**: ~$364/month for production setup
+
+See [deploy/pulumi/README.md](deploy/pulumi/README.md) for details.
 
 ---
 
@@ -589,7 +626,7 @@ See [examples/multilanguage_example.py](examples/multilanguage_example.py) for m
 
 ## 🗺️ Roadmap
 
-### ✅ Completed (v1.1.0)
+### ✅ Completed (v1.2.0)
 
 - ✅ Core library (Python)
 - ✅ Async/await support
@@ -601,19 +638,21 @@ See [examples/multilanguage_example.py](examples/multilanguage_example.py) for m
 - ✅ HTTP proxy mode
 - ✅ Docker & Kubernetes deployment
 - ✅ Terraform infrastructure
+- ✅ Pulumi infrastructure (Python)
+- ✅ Helm chart for Kubernetes
+- ✅ GitHub Actions CI/CD workflows
+- ✅ Pre-commit hooks for code quality
 - ✅ Comprehensive testing (100+ tests)
+- ✅ Security scanning (CodeQL, Snyk, Trivy, Bandit)
 - ✅ Sphinx documentation
 - ✅ Load testing suite
 - ✅ Multi-language support
 
-### 🔄 In Progress (v1.2.0)
+### 🔄 In Progress (v1.3.0)
 
 - ⏳ Node/TypeScript package (complete rewrite)
 - ⏳ WASM build for browser-based detection
-- ⏳ Pulumi infrastructure modules
-- ⏳ GitHub Actions CI/CD workflows
-- ⏳ Helm chart for Kubernetes
-- ⏳ Pre-commit hooks
+- ⏳ GitHub Pages documentation hosting
 
 ### 🔮 Future (v2.0.0)
 
@@ -625,6 +664,64 @@ See [examples/multilanguage_example.py](examples/multilanguage_example.py) for m
 - 🔮 Compliance dashboard
 - 🔮 Multi-tenant support
 - 🔮 Edge deployment (Cloudflare Workers, Lambda@Edge)
+
+---
+
+## 🔄 CI/CD & Automation
+
+### GitHub Actions Workflows
+
+We use GitHub Actions for continuous integration and deployment:
+
+#### Test Workflow
+- **Multi-version testing**: Python 3.9, 3.10, 3.11, 3.12
+- **Integration tests**: All adapters and storage backends
+- **Performance benchmarks**: Regression detection
+- **Load testing**: Locust-based stress tests with Redis
+
+#### Lint Workflow
+- **Python linting**: Ruff and MyPy for code quality
+- **Markdown linting**: Documentation quality checks
+- **YAML linting**: Configuration validation
+- **Dockerfile linting**: Hadolint for Docker best practices
+- **Terraform validation**: Infrastructure code checks
+
+#### Security Workflow
+- **CodeQL analysis**: GitHub's semantic code analysis
+- **Snyk scanning**: Dependency vulnerability detection
+- **Trivy scanning**: Container and filesystem scanning
+- **Bandit**: Python security linting
+- **Gitleaks**: Secret detection
+- **pip-audit**: Python package vulnerability scanning
+- **Dependency review**: PR dependency checks
+
+#### Documentation Workflow
+- **Sphinx build**: API documentation generation
+- **GitHub Pages deployment**: Automatic doc hosting
+
+#### Release Workflow
+- **Automated releases**: Triggered on version tags
+- **PyPI publishing**: Automatic package publishing
+- **Docker images**: Multi-architecture builds (amd64/arm64)
+- **GitHub releases**: Changelog and asset management
+
+### Running CI Locally
+
+```bash
+# Run tests like CI
+pytest packages/python/tests/
+
+# Run linting like CI
+ruff check .
+mypy packages/python/src/
+
+# Run security checks like CI
+bandit -r packages/python/src/
+pip-audit
+
+# Run pre-commit hooks (all checks)
+pre-commit run --all-files
+```
 
 ---
 
@@ -652,6 +749,10 @@ cd llm-slm-prompt-guard
 cd packages/python
 pip install -e ".[dev]"
 
+# Install pre-commit hooks (recommended)
+pip install pre-commit
+pre-commit install
+
 # Run tests
 pytest tests/
 
@@ -664,6 +765,31 @@ cd ../../docs
 make html
 ```
 
+### Pre-commit Hooks
+
+We use pre-commit hooks to ensure code quality:
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Install hooks
+pre-commit install
+
+# Run manually on all files
+pre-commit run --all-files
+```
+
+Configured hooks include:
+- **Ruff**: Linting and formatting
+- **MyPy**: Type checking
+- **Bandit**: Security scanning
+- **Markdown linting**: Documentation quality
+- **YAML linting**: Configuration validation
+- **Hadolint**: Dockerfile linting
+- **Terraform format**: Infrastructure code
+- **Gitleaks**: Secret detection
+
 ### Pull Request Process
 
 1. Fork the repository
@@ -671,10 +797,11 @@ make html
 3. Make your changes
 4. Add tests for new functionality
 5. Ensure all tests pass (`pytest`)
-6. Update documentation
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to the branch (`git push origin feature/amazing-feature`)
-9. Open a Pull Request
+6. Run pre-commit hooks (`pre-commit run --all-files`)
+7. Update documentation
+8. Commit your changes (`git commit -m 'Add amazing feature'`)
+9. Push to the branch (`git push origin feature/amazing-feature`)
+10. Open a Pull Request
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
@@ -725,14 +852,15 @@ Special thanks to the LLM/SLM community for feedback and contributions!
 
 ## 📈 Project Stats
 
-- **Version**: 1.1.0
+- **Version**: 1.2.0
 - **Test Coverage**: 85%+
 - **Test Cases**: 100+
-- **Lines of Code**: 7,214 (last release)
-- **Performance**: 500+ req/s (single instance)
+- **Lines of Code**: ~10,000+ (including infrastructure)
+- **Performance**: 500+ req/s (single instance), 2,000+ req/s (with cache)
 - **Supported Languages**: 10+
-- **Framework Integrations**: 4+
-- **Deployment Options**: 4 (Docker, K8s, Terraform, Manual)
+- **Framework Integrations**: 4+ (LangChain, LlamaIndex, Hugging Face, Vercel AI)
+- **Deployment Options**: 6 (Docker, Helm/K8s, Terraform, Pulumi, Docker Compose, Manual)
+- **CI/CD Workflows**: 5 (Test, Lint, Security, Docs, Release)
 
 ---
 
@@ -760,6 +888,9 @@ pip install llm-slm-prompt-guard[all]
 # Run tests
 pytest packages/python/tests/
 
+# Pre-commit hooks
+pre-commit install && pre-commit run --all-files
+
 # Build docs
 cd docs && make html
 
@@ -769,8 +900,14 @@ locust -f tests/load/locustfile.py --host=http://localhost:8000
 # Docker
 docker-compose up
 
-# Deploy to AWS
+# Deploy to Kubernetes (Helm)
+helm install my-prompt-guard prompt-guard/prompt-guard
+
+# Deploy to AWS (Terraform)
 cd deploy/terraform && terraform apply
+
+# Deploy to AWS (Pulumi)
+cd deploy/pulumi && pulumi up
 
 # Start HTTP proxy
 python packages/proxy/src/main.py
@@ -780,4 +917,4 @@ python packages/proxy/src/main.py
 
 **Built with ❤️ for the LLM/SLM community**
 
-**Version 1.1.0 | MIT License | [GitHub](https://github.com/nik-kale/llm-slm-prompt-guard)**
+**Version 1.2.0 | MIT License | [GitHub](https://github.com/nik-kale/llm-slm-prompt-guard)**

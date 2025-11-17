@@ -1,0 +1,40 @@
+name: prompt-guard
+runtime: python
+description: Enterprise-grade PII anonymization for LLM/SLM applications - AWS Infrastructure
+
+config:
+  aws:region:
+    description: AWS region for deployment
+    default: us-east-1
+
+  prompt-guard:environment:
+    description: Environment name (dev, staging, production)
+    default: production
+
+  prompt-guard:vpc-cidr:
+    description: CIDR block for VPC
+    default: 10.0.0.0/16
+
+  prompt-guard:rds-instance-class:
+    description: RDS instance class
+    default: db.t3.medium
+
+  prompt-guard:redis-node-type:
+    description: ElastiCache node type
+    default: cache.t3.medium
+
+  prompt-guard:ecs-cpu:
+    description: ECS task CPU units
+    default: 512
+
+  prompt-guard:ecs-memory:
+    description: ECS task memory in MB
+    default: 1024
+
+  prompt-guard:ecs-desired-count:
+    description: Desired number of ECS tasks
+    default: 3
+
+  prompt-guard:pii-policy:
+    description: PII detection policy to use
+    default: default_pii

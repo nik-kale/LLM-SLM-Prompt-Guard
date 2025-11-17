@@ -1,0 +1,33 @@
+apiVersion: v2
+name: prompt-guard
+description: Enterprise-grade PII anonymization for LLM/SLM applications
+type: application
+version: 1.1.0
+appVersion: "1.1.0"
+
+keywords:
+  - llm
+  - pii
+  - privacy
+  - security
+  - anonymization
+  - ml
+  - ai
+
+home: https://github.com/nik-kale/llm-slm-prompt-guard
+sources:
+  - https://github.com/nik-kale/llm-slm-prompt-guard
+
+maintainers:
+  - name: LLM-SLM-Prompt-Guard Contributors
+    email: support@prompt-guard.com
+
+dependencies:
+  - name: redis
+    version: "18.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: postgresql
+    version: "13.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
