@@ -318,7 +318,7 @@ def create_protected_streaming_chat(
     model: str = "gpt-4",
     api_key: Optional[str] = None,
     deanonymize_response: bool = True,
-) -> ProtectedStreamingChat:
+) -> "ProtectedStreamingChat":
     """
     Create a protected streaming chat instance.
 

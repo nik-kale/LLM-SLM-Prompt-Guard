@@ -1,0 +1,51 @@
+##
+# Custom Enterprise Policy
+#
+# This policy includes custom entity types for enterprise use cases
+# like employee IDs, project codes, badge numbers, etc.
+##
+
+name: custom_enterprise
+description: Enterprise PII including custom corporate identifiers
+entities:
+  # Standard PII
+  EMAIL:
+    placeholder: "[EMAIL_{i}]"
+  PHONE:
+    placeholder: "[PHONE_{i}]"
+  PHONE_NUMBER:
+    placeholder: "[PHONE_{i}]"
+  PERSON:
+    placeholder: "[NAME_{i}]"
+  NAME:
+    placeholder: "[NAME_{i}]"
+  SSN:
+    placeholder: "[SSN_{i}]"
+  CREDIT_CARD:
+    placeholder: "[CC_{i}]"
+  IP_ADDRESS:
+    placeholder: "[IP_{i}]"
+
+  # Corporate/Enterprise Identifiers
+  EMPLOYEE_ID:
+    placeholder: "[EMPLOYEE_ID_{i}]"
+  PROJECT_CODE:
+    placeholder: "[PROJECT_{i}]"
+  DEPARTMENT_CODE:
+    placeholder: "[DEPT_{i}]"
+  BADGE_NUMBER:
+    placeholder: "[BADGE_{i}]"
+
+  # Medical
+  MEDICAL_RECORD_NUMBER:
+    placeholder: "[MRN_{i}]"
+
+  # Financial
+  BANK_ACCOUNT:
+    placeholder: "[ACCOUNT_{i}]"
+  ROUTING_NUMBER:
+    placeholder: "[ROUTING_{i}]"
+  SWIFT_CODE:
+    placeholder: "[SWIFT_{i}]"
+  IBAN:
+    placeholder: "[IBAN_{i}]"

@@ -21,7 +21,7 @@ except ImportError:
     logger.warning("Redis not available. Install with: pip install redis")
 
 
-class RedisMapping Storage:
+class RedisMappingStorage:
     """
     Redis-based storage for PII mappings.
 

@@ -225,7 +225,7 @@ def create_protected_chat(
     chat: Any,
     guard: Any,
     **kwargs: Any,
-) -> ProtectedChatLLM:
+) -> "ProtectedChatLLM":
     """
     Create a protected LangChain chat model.
 

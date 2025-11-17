@@ -295,7 +295,7 @@ def create_protected_query_engine(
     query_engine: Any,
     guard: Any,
     **kwargs: Any,
-) -> ProtectedQueryEngine:
+) -> "ProtectedQueryEngine":
     """
     Create a protected LlamaIndex query engine.
 
@@ -319,7 +319,7 @@ def create_protected_chat_engine(
     chat_engine: Any,
     guard: Any,
     **kwargs: Any,
-) -> ProtectedChatEngine:
+) -> "ProtectedChatEngine":
     """
     Create a protected LlamaIndex chat engine.
 

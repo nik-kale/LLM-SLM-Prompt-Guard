@@ -362,7 +362,7 @@ def create_protected_pipeline(
     guard: Any,
     deanonymize_output: bool = True,
     store_mapping: bool = False,
-) -> ProtectedPipeline:
+) -> "ProtectedPipeline":
     """
     Create a protected Hugging Face pipeline.
 
@@ -390,7 +390,7 @@ def create_protected_conversational(
     pipeline: Any,
     guard: Any,
     deanonymize_output: bool = True,
-) -> ProtectedConversational:
+) -> "ProtectedConversational":
     """
     Create a protected conversational pipeline.
 
@@ -418,7 +418,7 @@ def create_protected_text_generation(
     tokenizer: Any,
     guard: Any,
     deanonymize_output: bool = True,
-) -> ProtectedTextGeneration:
+) -> "ProtectedTextGeneration":
     """
     Create a protected text generation instance.
 
