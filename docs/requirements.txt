@@ -1,0 +1,8 @@
+# Sphinx documentation requirements
+sphinx>=7.0.0
+sphinx-rtd-theme>=2.0.0
+sphinx-autobuild>=2024.0.0
+myst-parser>=2.0.0
+
+# For autodoc to work with the package
+-e ../packages/python/
