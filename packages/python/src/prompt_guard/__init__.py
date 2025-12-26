@@ -42,6 +42,15 @@ from .telemetry import (
     is_telemetry_available,
 )
 
+# Anonymization strategies
+from .anonymizers.base import AnonymizationStrategy, BaseAnonymizer
+
+try:
+    from .anonymizers.synthetic import SyntheticAnonymizer
+    _SYNTHETIC_AVAILABLE = True
+except ImportError:
+    _SYNTHETIC_AVAILABLE = False
+
 # Detectors
 from .detectors import BaseDetector, RegexDetector
 
@@ -175,7 +184,13 @@ __all__ = [
     "configure_telemetry",
     "get_telemetry",
     "is_telemetry_available",
+    # Anonymization strategies
+    "AnonymizationStrategy",
+    "BaseAnonymizer",
 ]
+
+if _SYNTHETIC_AVAILABLE:
+    __all__.append("SyntheticAnonymizer")
 
 # Optional exports
 if _PRESIDIO_AVAILABLE:

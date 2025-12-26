@@ -71,6 +71,11 @@ opentelemetry = [
     "opentelemetry-exporter-otlp>=1.20.0",
 ]
 
+# Synthetic data generation
+faker = [
+    "faker>=20.0.0",
+]
+
 # Examples
 examples = [
     "fastapi>=0.104.0",
@@ -94,6 +99,7 @@ all = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp>=1.20.0",
+    "faker>=20.0.0",
 ]
 
 [project.urls]
