@@ -879,6 +879,158 @@ While still early, llm-slm-prompt-guard is designed for:
 
 ---
 
+## 💻 Command Line Interface (CLI)
+
+The `prompt-guard` CLI provides quick PII detection and anonymization without writing code.
+
+### Installation
+
+The CLI is included with the base package:
+
+```bash
+pip install llm-slm-prompt-guard
+```
+
+### Commands
+
+#### Detect PII
+
+Detect PII entities in text or files:
+
+```bash
+# Detect from text
+prompt-guard detect "Contact John at john@example.com"
+
+# Detect from file
+prompt-guard detect --file document.txt
+
+# Detect from stdin
+cat document.txt | prompt-guard detect
+
+# JSON output for CI/CD integration
+prompt-guard detect --file data.txt --json-output
+
+# Use specific policy and detectors
+prompt-guard detect --policy gdpr_strict --detectors regex,presidio --file input.txt
+```
+
+#### Anonymize Text
+
+Anonymize PII in text or files:
+
+```bash
+# Anonymize text
+prompt-guard anonymize "My email is john@example.com"
+
+# Anonymize file and save output
+prompt-guard anonymize --file input.txt --output anonymized.txt
+
+# Save mapping for de-anonymization
+prompt-guard anonymize --file input.txt --output anon.txt --mapping-output mapping.json
+
+# JSON output
+prompt-guard anonymize "Contact me at 555-1234" --json-output
+```
+
+#### De-anonymize Text
+
+Restore original PII from anonymized text:
+
+```bash
+# De-anonymize using mapping file
+prompt-guard deanonymize "Contact [PERSON_1] at [EMAIL_1]" --mapping mapping.json
+
+# From file
+prompt-guard deanonymize --file anonymized.txt --mapping mapping.json --output original.txt
+```
+
+#### Scan Directory
+
+Batch scan files for PII:
+
+```bash
+# Scan directory for .txt files
+prompt-guard scan ./documents --pattern "*.txt"
+
+# Recursive scan
+prompt-guard scan ./data --pattern "*.md" --recursive
+
+# JSON output for reporting
+prompt-guard scan ./logs --pattern "*.log" --recursive --json-output
+```
+
+#### Validate Policy
+
+Validate custom policy YAML files:
+
+```bash
+prompt-guard validate-policy my-custom-policy.yaml
+```
+
+#### List Resources
+
+List available policies and detectors:
+
+```bash
+# List available policies
+prompt-guard list-policies
+
+# List available detectors
+prompt-guard list-detectors
+```
+
+### CLI Options
+
+Common options across commands:
+
+- `--policy, -p`: Policy to use (default: `default_pii`)
+- `--detectors, -d`: Comma-separated detector list (default: `regex`)
+- `--confidence, -c`: Minimum confidence threshold for ML detectors (default: `0.5`)
+- `--json-output, -j`: Output results as JSON
+- `--file, -f`: Read from file instead of argument
+- `--output, -o`: Write output to file
+
+### Examples
+
+#### CI/CD Integration
+
+```bash
+# Check for PII in code commits
+#!/bin/bash
+if prompt-guard scan ./src --pattern "*.py" --json-output | jq '.total_entities > 0'; then
+  echo "❌ PII detected in source code"
+  exit 1
+fi
+```
+
+#### Pre-commit Hook
+
+```yaml
+# .pre-commit-config.yaml
+- repo: local
+  hooks:
+    - id: pii-detection
+      name: Detect PII in files
+      entry: prompt-guard scan
+      args: ['.', '--pattern', '*.txt', '--pattern', '*.md']
+      language: system
+      pass_filenames: false
+```
+
+#### Quick Testing
+
+```bash
+# Test anonymization quickly
+echo "SSN: 123-45-6789" | prompt-guard anonymize
+# Output: SSN: [SSN_1]
+
+# Check what entities are detected
+echo "Call 555-1234 or email test@example.com" | prompt-guard detect
+# Output shows: PHONE and EMAIL entities
+```
+
+---
+
 ## ⚡ Quick Commands Reference
 
 ```bash
