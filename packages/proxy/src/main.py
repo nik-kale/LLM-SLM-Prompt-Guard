@@ -36,7 +36,7 @@ import httpx
 import uvicorn
 import redis
 
-from prompt_guard import PromptGuard
+from prompt_guard import PromptGuard, configure_logging, get_logger
 from prompt_guard.storage.redis_storage import RedisMappingStorage
 from rate_limiter import (
     TokenBucketRateLimiter,
@@ -45,12 +45,9 @@ from rate_limiter import (
     RateLimitExceeded,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure structured JSON logging
+configure_logging(level="INFO", json_format=True)
+logger = get_logger("proxy")
 
 
 @dataclass
@@ -156,13 +153,18 @@ class LLMProxy:
         """
         self.metrics["requests_total"] += 1
 
+        # Get client context
+        client_ip = request.client.host if request.client else "unknown"
+        user_id = request.headers.get("X-User-ID")
+        
+        # Set logging context
+        request_id = logger.set_request_id()
+        if user_id:
+            logger.set_user_id(user_id)
+        
         # Check rate limits
         if self.rate_limiter:
             try:
-                # Get client IP and user ID
-                client_ip = request.client.host if request.client else "unknown"
-                user_id = request.headers.get("X-User-ID")
-                
                 # Check global rate limit first
                 if self.global_limiter:
                     self.global_limiter.check_global_limit()
@@ -172,6 +174,12 @@ class LLMProxy:
                 
             except RateLimitExceeded as e:
                 self.metrics["rate_limit_exceeded"] += 1
+                logger.warning(
+                    "Rate limit exceeded",
+                    client_ip=client_ip,
+                    limit_type=e.limit_type,
+                    retry_after=e.retry_after,
+                )
                 raise HTTPException(
                     status_code=429,
                     detail=f"Rate limit exceeded. Retry after {e.retry_after} seconds.",
@@ -189,9 +197,10 @@ class LLMProxy:
 
             # Create session
             session_id = self.storage.create_session(
-                user_id=request.headers.get("X-User-ID"),
+                user_id=user_id,
                 metadata={"provider": provider, "endpoint": endpoint},
             )
+            logger.set_session_id(session_id)
 
             # Anonymize messages in the request
             anonymized_body, mapping = self._anonymize_request_body(body, provider_config)
@@ -201,6 +210,15 @@ class LLMProxy:
                 self.storage.store_mapping(session_id, mapping)
                 self.metrics["requests_anonymized"] += 1
                 self.metrics["pii_detected"] += len(mapping)
+                
+                # Log PII detection (without values)
+                entity_types = list(set([k.split('_')[0].strip('[]') for k in mapping.keys()]))
+                logger.info(
+                    "PII detected and anonymized",
+                    entity_count=len(mapping),
+                    entity_types=entity_types,
+                    provider=provider,
+                )
 
             # Build target URL
             target_url = f"{provider_config['base_url']}{endpoint}"
@@ -243,8 +261,17 @@ class LLMProxy:
 
         except Exception as e:
             self.metrics["errors"] += 1
-            logger.error(f"Proxy error: {e}", exc_info=True)
+            logger.error(
+                "Proxy request failed",
+                exc_info=True,
+                provider=provider,
+                endpoint=endpoint,
+                error_type=type(e).__name__,
+            )
             raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            # Clear logging context
+            logger.clear_context()
 
     def _anonymize_request_body(
         self,
@@ -449,7 +476,13 @@ async def startup():
     global proxy
     config = ProxyConfig()  # Load from environment or config file
     proxy = LLMProxy(config)
-    logger.info(f"Proxy initialized on port {config.port}")
+    logger.info(
+        "Proxy initialized successfully",
+        port=config.port,
+        host=config.host,
+        policy=config.policy,
+        rate_limiting_enabled=config.enable_rate_limiting,
+    )
 
 
 @app.get("/health")
