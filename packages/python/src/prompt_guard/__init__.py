@@ -15,6 +15,7 @@ from .types import (
     AnonymizeOptions,
     DetectionReport,
     RiskLevel,
+    OverlapStrategy,
 )
 
 # Report generation
@@ -140,6 +141,7 @@ __all__ = [
     "AnonymizeOptions",
     "DetectionReport",
     "RiskLevel",
+    "OverlapStrategy",
     # Detectors
     "BaseDetector",
     "RegexDetector",
