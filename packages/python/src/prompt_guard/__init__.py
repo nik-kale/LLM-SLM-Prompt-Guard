@@ -13,6 +13,15 @@ from .types import (
     AnonymizeResult,
     Mapping,
     AnonymizeOptions,
+    DetectionReport,
+    RiskLevel,
+)
+
+# Report generation
+from .report import (
+    generate_detection_report,
+    format_report_text,
+    format_report_html,
 )
 
 # Detectors
@@ -121,6 +130,8 @@ __all__ = [
     "AnonymizeResult",
     "Mapping",
     "AnonymizeOptions",
+    "DetectionReport",
+    "RiskLevel",
     # Detectors
     "BaseDetector",
     "RegexDetector",
@@ -130,6 +141,10 @@ __all__ = [
     "RedisCache",
     "CachedPromptGuard",
     "create_cache_key",
+    # Reporting
+    "generate_detection_report",
+    "format_report_text",
+    "format_report_html",
 ]
 
 # Optional exports
