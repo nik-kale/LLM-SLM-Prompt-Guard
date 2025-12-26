@@ -33,6 +33,15 @@ from .logging import (
     get_logger,
 )
 
+# Telemetry
+from .telemetry import (
+    Telemetry,
+    TelemetryConfig,
+    configure_telemetry,
+    get_telemetry,
+    is_telemetry_available,
+)
+
 # Detectors
 from .detectors import BaseDetector, RegexDetector
 
@@ -160,6 +169,12 @@ __all__ = [
     "JSONFormatter",
     "configure_logging",
     "get_logger",
+    # Telemetry
+    "Telemetry",
+    "TelemetryConfig",
+    "configure_telemetry",
+    "get_telemetry",
+    "is_telemetry_available",
 ]
 
 # Optional exports
