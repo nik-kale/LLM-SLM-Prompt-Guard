@@ -76,6 +76,11 @@ faker = [
     "faker>=20.0.0",
 ]
 
+# Encryption anonymization
+cryptography = [
+    "cryptography>=41.0.0",
+]
+
 # Examples
 examples = [
     "fastapi>=0.104.0",
@@ -100,6 +105,7 @@ all = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp>=1.20.0",
     "faker>=20.0.0",
+    "cryptography>=41.0.0",
 ]
 
 [project.urls]
