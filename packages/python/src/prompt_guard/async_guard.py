@@ -16,7 +16,8 @@ import pathlib
 import yaml
 
 from .detectors.regex_detector import RegexDetector
-from .types import DetectorResult, Mapping, AnonymizeResult, AnonymizeOptions
+from .types import DetectorResult, Mapping, AnonymizeResult, AnonymizeOptions, DetectionReport
+from .report import generate_detection_report
 
 
 class AsyncPromptGuard:
@@ -176,6 +177,47 @@ class AsyncPromptGuard:
         anonymized.append(text[last_idx:])
 
         return "".join(anonymized), mapping
+
+    async def detect_only_async(
+        self,
+        text: str,
+        min_confidence: Optional[float] = None,
+        include_preview: bool = False,
+    ) -> DetectionReport:
+        """
+        Asynchronously detect PII entities without performing anonymization (dry-run mode).
+        
+        Useful for:
+        - Compliance auditing and reporting
+        - Debugging detector configurations
+        - Generating PII statistics
+        - Tuning confidence thresholds
+        
+        Args:
+            text: The text to analyze
+            min_confidence: Minimum confidence threshold for ML detectors (0.0-1.0)
+            include_preview: Include first 100 chars of text in report
+        
+        Returns:
+            DetectionReport with statistics and risk assessment
+        """
+        # Run detection in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        all_results = await loop.run_in_executor(
+            None, self._run_detectors, text
+        )
+        
+        # Filter by confidence if specified
+        if min_confidence is not None and min_confidence > 0:
+            all_results = [
+                r for r in all_results
+                if r.confidence is None or r.confidence >= min_confidence
+            ]
+        
+        # Generate report in executor
+        return await loop.run_in_executor(
+            None, generate_detection_report, text, all_results, include_preview
+        )
 
     async def deanonymize_async(self, text: str, mapping: Mapping) -> str:
         """

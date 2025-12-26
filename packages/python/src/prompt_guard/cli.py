@@ -9,6 +9,7 @@ from typing import Optional
 import click
 from . import PromptGuard, get_version, list_policies, list_detectors
 from .types import DetectorResult
+from .report import format_report_text
 
 
 @click.group()
@@ -40,6 +41,12 @@ def cli():
     help="Minimum confidence threshold for ML detectors (default: 0.5)",
 )
 @click.option("--json-output", "-j", is_flag=True, help="Output results as JSON")
+@click.option(
+    "--report",
+    "-r",
+    is_flag=True,
+    help="Generate comprehensive detection report with risk assessment",
+)
 def detect(
     text: Optional[str],
     file: Optional[str],
@@ -47,6 +54,7 @@ def detect(
     detectors: str,
     confidence: float,
     json_output: bool,
+    report: bool,
 ):
     """Detect PII entities in text or file."""
     # Get input text
@@ -71,7 +79,19 @@ def detect(
         click.echo(f"Error initializing PromptGuard: {e}", err=True)
         sys.exit(1)
 
-    # Detect entities
+    # Use report mode if requested
+    if report:
+        detection_report = guard.detect_only(
+            input_text, min_confidence=confidence, include_preview=True
+        )
+        
+        if json_output:
+            click.echo(json.dumps(detection_report.to_dict(), indent=2))
+        else:
+            click.echo(format_report_text(detection_report))
+        return
+
+    # Detect entities (normal mode)
     all_results = []
     for detector in guard.detectors:
         all_results.extend(detector.detect(input_text))

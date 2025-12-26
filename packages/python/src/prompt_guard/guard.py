@@ -5,7 +5,8 @@ import yaml
 import pathlib
 
 from .detectors.regex_detector import RegexDetector
-from .types import DetectorResult, Mapping, AnonymizeResult, AnonymizeOptions
+from .types import DetectorResult, Mapping, AnonymizeResult, AnonymizeOptions, DetectionReport
+from .report import generate_detection_report
 
 
 class PromptGuard:
@@ -150,6 +151,42 @@ class PromptGuard:
         anonymized.append(text[last_idx:])
 
         return "".join(anonymized), mapping
+
+    def detect_only(
+        self,
+        text: str,
+        min_confidence: Optional[float] = None,
+        include_preview: bool = False,
+    ) -> DetectionReport:
+        """
+        Detect PII entities without performing anonymization (dry-run mode).
+        
+        Useful for:
+        - Compliance auditing and reporting
+        - Debugging detector configurations
+        - Generating PII statistics
+        - Tuning confidence thresholds
+        
+        Args:
+            text: The text to analyze
+            min_confidence: Minimum confidence threshold for ML detectors (0.0-1.0)
+            include_preview: Include first 100 chars of text in report
+        
+        Returns:
+            DetectionReport with statistics and risk assessment
+        """
+        all_results: List[DetectorResult] = []
+        for detector in self.detectors:
+            all_results.extend(detector.detect(text))
+        
+        # Filter by confidence if specified
+        if min_confidence is not None and min_confidence > 0:
+            all_results = [
+                r for r in all_results
+                if r.confidence is None or r.confidence >= min_confidence
+            ]
+        
+        return generate_detection_report(text, all_results, include_preview)
 
     def deanonymize(self, text: str, mapping: Mapping) -> str:
         """
