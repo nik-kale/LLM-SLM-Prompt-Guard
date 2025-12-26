@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 import yaml
 import pathlib
 
 from .detectors.regex_detector import RegexDetector
-from .types import DetectorResult, Mapping, AnonymizeResult
+from .types import DetectorResult, Mapping, AnonymizeResult, AnonymizeOptions
 
 
 class PromptGuard:
@@ -78,20 +78,41 @@ class PromptGuard:
         with policy_path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f)
 
-    def anonymize(self, text: str) -> AnonymizeResult:
+    def anonymize(
+        self,
+        text: str,
+        options: Optional[AnonymizeOptions] = None,
+        min_confidence: Optional[float] = None,
+    ) -> AnonymizeResult:
         """
         Anonymize PII in the given text.
 
         Args:
             text: The text to anonymize
+            options: Anonymization options (takes precedence over min_confidence)
+            min_confidence: Minimum confidence threshold for ML detectors (0.0-1.0)
+                          Shorthand for options.min_confidence
 
         Returns:
             A tuple of (anonymized_text, mapping) where mapping is a dict
             of placeholder -> original value
         """
+        # Handle options
+        if options is None:
+            options = AnonymizeOptions()
+            if min_confidence is not None:
+                options.min_confidence = min_confidence
+
         all_results: List[DetectorResult] = []
         for detector in self.detectors:
             all_results.extend(detector.detect(text))
+
+        # Filter by confidence if needed
+        if options.min_confidence > 0:
+            all_results = [
+                r for r in all_results
+                if r.confidence is None or r.confidence >= options.min_confidence
+            ]
 
         # Sort by start index so replacements are stable
         all_results.sort(key=lambda r: r.start)
@@ -146,17 +167,27 @@ class PromptGuard:
             result = result.replace(placeholder, original)
         return result
 
-    def batch_anonymize(self, texts: List[str]) -> List[AnonymizeResult]:
+    def batch_anonymize(
+        self,
+        texts: List[str],
+        options: Optional[AnonymizeOptions] = None,
+        min_confidence: Optional[float] = None,
+    ) -> List[AnonymizeResult]:
         """
         Anonymize multiple texts in batch.
 
         Args:
             texts: List of texts to anonymize
+            options: Anonymization options (takes precedence over min_confidence)
+            min_confidence: Minimum confidence threshold for ML detectors (0.0-1.0)
 
         Returns:
             List of (anonymized_text, mapping) tuples
         """
-        return [self.anonymize(text) for text in texts]
+        return [
+            self.anonymize(text, options=options, min_confidence=min_confidence)
+            for text in texts
+        ]
 
     def batch_deanonymize(
         self, texts: List[str], mappings: List[Mapping]
