@@ -30,6 +30,14 @@ class RiskLevel(str, Enum):
     CRITICAL = "critical"
 
 
+class OverlapStrategy(str, Enum):
+    """Strategy for resolving overlapping entity detections."""
+    LONGEST_MATCH = "longest_match"  # Prefer longer spans
+    HIGHEST_CONFIDENCE = "highest_confidence"  # Prefer higher confidence scores
+    FIRST_DETECTOR = "first_detector"  # Prefer detectors in order specified
+    MERGE_SAME_TYPE = "merge"  # Combine overlapping entities of same type
+
+
 @dataclass
 class DetectionReport:
     """
