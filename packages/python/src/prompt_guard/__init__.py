@@ -24,6 +24,14 @@ from .report import (
     format_report_html,
 )
 
+# Logging
+from .logging import (
+    StructuredLogger,
+    JSONFormatter,
+    configure_logging,
+    get_logger,
+)
+
 # Detectors
 from .detectors import BaseDetector, RegexDetector
 
@@ -145,6 +153,11 @@ __all__ = [
     "generate_detection_report",
     "format_report_text",
     "format_report_html",
+    # Logging
+    "StructuredLogger",
+    "JSONFormatter",
+    "configure_logging",
+    "get_logger",
 ]
 
 # Optional exports
