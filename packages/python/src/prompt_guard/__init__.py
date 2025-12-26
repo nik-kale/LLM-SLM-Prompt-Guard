@@ -59,6 +59,19 @@ try:
 except ImportError:
     _ENCRYPT_AVAILABLE = False
 
+# Hooks
+from .hooks import (
+    HookRegistry,
+    HookEvent,
+    DetectionEvent,
+    AnonymizeEvent,
+    AnonymizedEvent,
+    ErrorEvent,
+    AlertHook,
+    MetricsHook,
+    AuditHook,
+)
+
 # Detectors
 from .detectors import BaseDetector, RegexDetector
 
@@ -204,6 +217,19 @@ if _SYNTHETIC_AVAILABLE:
 
 if _ENCRYPT_AVAILABLE:
     __all__.append("EncryptAnonymizer")
+
+# Add hooks
+__all__.extend([
+    "HookRegistry",
+    "HookEvent",
+    "DetectionEvent",
+    "AnonymizeEvent",
+    "AnonymizedEvent",
+    "ErrorEvent",
+    "AlertHook",
+    "MetricsHook",
+    "AuditHook",
+])
 
 # Optional exports
 if _PRESIDIO_AVAILABLE:
