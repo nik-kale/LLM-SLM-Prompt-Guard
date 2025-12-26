@@ -44,12 +44,20 @@ from .telemetry import (
 
 # Anonymization strategies
 from .anonymizers.base import AnonymizationStrategy, BaseAnonymizer
+from .anonymizers.hash import HashAnonymizer
+from .anonymizers.mask import MaskAnonymizer
 
 try:
     from .anonymizers.synthetic import SyntheticAnonymizer
     _SYNTHETIC_AVAILABLE = True
 except ImportError:
     _SYNTHETIC_AVAILABLE = False
+
+try:
+    from .anonymizers.encrypt import EncryptAnonymizer
+    _ENCRYPT_AVAILABLE = True
+except ImportError:
+    _ENCRYPT_AVAILABLE = False
 
 # Detectors
 from .detectors import BaseDetector, RegexDetector
@@ -187,10 +195,15 @@ __all__ = [
     # Anonymization strategies
     "AnonymizationStrategy",
     "BaseAnonymizer",
+    "HashAnonymizer",
+    "MaskAnonymizer",
 ]
 
 if _SYNTHETIC_AVAILABLE:
     __all__.append("SyntheticAnonymizer")
+
+if _ENCRYPT_AVAILABLE:
+    __all__.append("EncryptAnonymizer")
 
 # Optional exports
 if _PRESIDIO_AVAILABLE:
