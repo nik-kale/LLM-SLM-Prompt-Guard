@@ -34,9 +34,16 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import uvicorn
+import redis
 
 from prompt_guard import PromptGuard
 from prompt_guard.storage.redis_storage import RedisMappingStorage
+from rate_limiter import (
+    TokenBucketRateLimiter,
+    GlobalRateLimiter,
+    RateLimitConfig,
+    RateLimitExceeded,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -56,7 +63,13 @@ class ProxyConfig:
     detectors: List[str] = None
     enable_metrics: bool = True
     enable_audit: bool = True
-    rate_limit: Optional[int] = None  # Requests per minute
+    # Rate limiting configuration
+    enable_rate_limiting: bool = True
+    requests_per_minute: int = 60
+    requests_per_hour: int = 1000
+    global_requests_per_second: int = 100
+    burst_size: int = 10
+    trusted_ips: List[str] = None
 
 
 class LLMProxy:
@@ -99,11 +112,29 @@ class LLMProxy:
             redis_url=config.redis_url,
             enable_audit=config.enable_audit,
         )
+        
+        # Initialize rate limiters
+        self.rate_limiter = None
+        self.global_limiter = None
+        if config.enable_rate_limiting:
+            redis_client = redis.from_url(config.redis_url, decode_responses=True)
+            rate_limit_config = RateLimitConfig(
+                requests_per_minute=config.requests_per_minute,
+                requests_per_hour=config.requests_per_hour,
+                burst_size=config.burst_size,
+                trusted_ips=set(config.trusted_ips or []),
+            )
+            self.rate_limiter = TokenBucketRateLimiter(redis_client, rate_limit_config)
+            self.global_limiter = GlobalRateLimiter(
+                redis_client, config.global_requests_per_second
+            )
+        
         self.metrics = {
             "requests_total": 0,
             "requests_anonymized": 0,
             "pii_detected": 0,
             "errors": 0,
+            "rate_limit_exceeded": 0,
         }
 
     async def proxy_request(
@@ -124,6 +155,28 @@ class LLMProxy:
             Proxied response (with de-anonymized content)
         """
         self.metrics["requests_total"] += 1
+
+        # Check rate limits
+        if self.rate_limiter:
+            try:
+                # Get client IP and user ID
+                client_ip = request.client.host if request.client else "unknown"
+                user_id = request.headers.get("X-User-ID")
+                
+                # Check global rate limit first
+                if self.global_limiter:
+                    self.global_limiter.check_global_limit()
+                
+                # Check per-user/IP rate limit
+                self.rate_limiter.check_rate_limit(client_ip, user_id)
+                
+            except RateLimitExceeded as e:
+                self.metrics["rate_limit_exceeded"] += 1
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Rate limit exceeded. Retry after {e.retry_after} seconds.",
+                    headers={"Retry-After": str(e.retry_after)},
+                )
 
         # Get provider config
         provider_config = self.PROVIDERS.get(provider)
@@ -336,6 +389,30 @@ class LLMProxy:
         return {
             **self.metrics,
             "storage_health": self.storage.health_check(),
+            "rate_limiting_enabled": self.rate_limiter is not None,
+        }
+    
+    def get_rate_limit_status(
+        self,
+        client_ip: str,
+        user_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Get rate limit status for a client.
+        
+        Args:
+            client_ip: Client IP address
+            user_id: Optional user identifier
+        
+        Returns:
+            Rate limit status including remaining requests
+        """
+        if not self.rate_limiter:
+            return {"rate_limiting": "disabled"}
+        
+        return {
+            "rate_limiting": "enabled",
+            **self.rate_limiter.get_remaining(client_ip, user_id),
         }
 
 
@@ -385,6 +462,17 @@ async def health_check():
 async def metrics(proxy: LLMProxy = Depends(get_proxy)):
     """Get proxy metrics."""
     return proxy.get_metrics()
+
+
+@app.get("/ratelimit/status")
+async def rate_limit_status(
+    request: Request,
+    proxy: LLMProxy = Depends(get_proxy),
+):
+    """Get rate limit status for the current client."""
+    client_ip = request.client.host if request.client else "unknown"
+    user_id = request.headers.get("X-User-ID")
+    return proxy.get_rate_limit_status(client_ip, user_id)
 
 
 @app.api_route("/openai/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
