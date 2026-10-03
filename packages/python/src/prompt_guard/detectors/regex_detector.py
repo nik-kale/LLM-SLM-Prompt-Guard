@@ -3,7 +3,10 @@ from typing import List
 from .base import BaseDetector
 from ..types import DetectorResult
 
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# The lookbehind anchors the local part to the start of a run of local-part
+# characters. Without it the engine retries the greedy "+" from every offset
+# inside a long run that contains no "@", which is quadratic in the input size.
+EMAIL_RE = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"\+?\d[\d\-\s]{7,}\d")
 # Simple name pattern - detects capitalized words that look like names
 NAME_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")

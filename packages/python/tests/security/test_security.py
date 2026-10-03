@@ -122,6 +122,37 @@ class TestRegexSafety:
         # Should complete quickly
         assert duration < 1.0
 
+    @pytest.mark.parametrize(
+        "payload",
+        ["a" * 200_000, "a." * 100_000, "x-" * 100_000, "1" * 200_000],
+        ids=["letters", "dotted", "hyphenated", "digits"],
+    )
+    def test_detection_is_linear_on_long_runs(self, payload):
+        """Long runs without an "@" must not trigger quadratic backtracking."""
+        import time
+
+        from prompt_guard.detectors import EnhancedRegexDetector, RegexDetector
+
+        for detector in (RegexDetector(), EnhancedRegexDetector()):
+            start = time.perf_counter()
+            detector.detect(payload)
+            duration = time.perf_counter() - start
+            assert duration < 2.0, f"{type(detector).__name__} took {duration:.1f}s"
+
+    def test_enhanced_detector_scales_with_many_matches(self):
+        """Overlap bookkeeping must not be quadratic in the number of matches."""
+        import time
+
+        from prompt_guard.detectors import EnhancedRegexDetector
+
+        text = "mail user@example.com now. " * 20_000
+        start = time.perf_counter()
+        results = EnhancedRegexDetector().detect(text)
+        duration = time.perf_counter() - start
+
+        assert sum(r.entity_type == "EMAIL" for r in results) == 20_000
+        assert duration < 3.0
+
 
 class TestDataLeakage:
     """Test for potential data leakage."""
