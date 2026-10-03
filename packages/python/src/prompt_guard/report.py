@@ -6,7 +6,9 @@ from typing import List, Dict
 from .types import DetectorResult, DetectionReport, RiskLevel
 
 
-# High-risk PII types that trigger higher risk scores
+# High-risk PII types that trigger higher risk scores. Includes the names the
+# bundled detectors emit (e.g. DRIVERS_LICENSE, MRN, EIN) as well as the
+# generic names.
 HIGH_RISK_ENTITIES = {
     "SSN",
     "CREDIT_CARD",
@@ -14,8 +16,13 @@ HIGH_RISK_ENTITIES = {
     "CVV",
     "PASSPORT",
     "DRIVER_LICENSE",
+    "DRIVERS_LICENSE",
     "MEDICAL_RECORD",
+    "MRN",
     "TAX_ID",
+    "EIN",
+    "NIN_UK",
+    "NHS_NUMBER",
     "CRYPTO_ADDRESS",
 }
 
@@ -50,9 +57,10 @@ def generate_detection_report(
     for entity in entities:
         summary[entity.entity_type] = summary.get(entity.entity_type, 0) + 1
     
-    # Calculate PII coverage
+    # Calculate PII coverage. Detections can overlap (several detectors, or
+    # several patterns over one value), so count each character once.
     total_chars = len(text)
-    pii_chars = sum(entity.end - entity.start for entity in entities)
+    pii_chars = _covered_chars(entities)
     coverage = (pii_chars / total_chars) if total_chars > 0 else 0.0
     
     # Assess risk level
@@ -72,6 +80,20 @@ def generate_detection_report(
         pii_chars=pii_chars,
         text_preview=text_preview,
     )
+
+
+def _covered_chars(entities: List[DetectorResult]) -> int:
+    """Number of characters covered by at least one entity."""
+    covered = 0
+    current_start = current_end = -1
+    for entity in sorted(entities, key=lambda e: e.start):
+        if entity.start >= current_end:
+            covered += max(current_end - current_start, 0)
+            current_start, current_end = entity.start, entity.end
+        else:
+            current_end = max(current_end, entity.end)
+    covered += max(current_end - current_start, 0)
+    return covered
 
 
 def _calculate_risk_level(

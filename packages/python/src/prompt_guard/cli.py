@@ -2,6 +2,7 @@
 CLI interface for Prompt Guard - Quick PII detection and anonymization.
 """
 
+import os
 import sys
 import json
 import pathlib
@@ -10,6 +11,21 @@ import click
 from . import PromptGuard, get_version, list_policies, list_detectors
 from .types import DetectorResult
 from .report import format_report_text
+
+
+def _write_private(path: str, content: str) -> None:
+    """
+    Write a file that contains original PII (mappings, restored text) so that
+    only the current user can read it.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        # O_CREAT's mode does not apply to a file that already exists.
+        os.fchmod(fd, 0o600)
+    except (AttributeError, OSError):  # pragma: no cover - not on Windows
+        pass
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
 @click.group()
@@ -223,16 +239,19 @@ def anonymize(
 
     # Write or print output
     if output:
-        with open(output, "w", encoding="utf-8") as f:
-            f.write(output_str)
+        if json_output:
+            # The JSON output includes the mapping
+            _write_private(output, output_str)
+        else:
+            with open(output, "w", encoding="utf-8") as f:
+                f.write(output_str)
         click.echo(f"Anonymized text written to: {output}")
     else:
         click.echo(output_str)
 
     # Write mapping if requested
     if mapping_output:
-        with open(mapping_output, "w", encoding="utf-8") as f:
-            json.dump(mapping, f, indent=2)
+        _write_private(mapping_output, json.dumps(mapping, indent=2))
         click.echo(f"Mapping written to: {mapping_output}")
 
 
@@ -281,8 +300,7 @@ def deanonymize(
 
     # Write or print output
     if output:
-        with open(output, "w", encoding="utf-8") as f:
-            f.write(original_text)
+        _write_private(output, original_text)
         click.echo(f"De-anonymized text written to: {output}")
     else:
         click.echo(original_text)
@@ -423,7 +441,7 @@ def validate_policy(policy_file: str):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(name="list-policies")
 def list_policies_cmd():
     """List all available built-in policies."""
     policies = list_policies()
@@ -433,7 +451,7 @@ def list_policies_cmd():
     click.echo()
 
 
-@cli.command()
+@cli.command(name="list-detectors")
 def list_detectors_cmd():
     """List all available detectors and their status."""
     detectors = list_detectors()
