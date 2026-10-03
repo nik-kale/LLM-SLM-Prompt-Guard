@@ -50,3 +50,57 @@ class TestEmailPatterns:
     def test_email_spans_unchanged(self, detector_cls, text, expected):
         emails = [r.text for r in detector_cls().detect(text) if r.entity_type == "EMAIL"]
         assert emails == [expected]
+
+
+class TestDetectorConfiguration:
+    def test_enhanced_regex_by_name(self):
+        from prompt_guard import PromptGuard
+
+        guard = PromptGuard(detectors=["regex", "enhanced_regex"], policy="hipaa_phi")
+
+        anonymized, mapping = guard.anonymize("Record MRN-1234567 for jane@example.com")
+
+        assert "MRN-1234567" not in anonymized
+        assert "MRN-1234567" in mapping.values()
+
+    def test_detector_instances(self):
+        from prompt_guard import PromptGuard
+
+        guard = PromptGuard(detectors=[EnhancedRegexDetector(entity_types=["EMAIL"])])
+
+        assert guard.anonymize("a@example.com 555-123-4567") == (
+            "[EMAIL_1] 555-123-4567",
+            {"[EMAIL_1]": "a@example.com"},
+        )
+
+    def test_unknown_detector_name(self):
+        from prompt_guard import PromptGuard
+
+        with pytest.raises(ValueError, match="Unknown detector backend"):
+            PromptGuard(detectors=["nonexistent"])
+
+
+class TestMlDetectorFailures:
+    def test_presidio_error_is_raised_not_swallowed(self, caplog):
+        # A failing analyzer used to be logged and turned into "no PII
+        # found", so the text went out unredacted.
+        from prompt_guard import PromptGuard
+        from prompt_guard.detectors.presidio_detector import PresidioDetector
+
+        secret = "jane@example.com"
+
+        class FailingAnalyzer:
+            def analyze(self, text, **kwargs):
+                raise RuntimeError(f"model crashed on {text!r}")
+
+        detector = PresidioDetector.__new__(PresidioDetector)
+        detector.language = "en"
+        detector.entities = None
+        detector.score_threshold = 0.5
+        detector.analyzer = FailingAnalyzer()
+        guard = PromptGuard(detectors=[detector])
+
+        with pytest.raises(RuntimeError):
+            guard.anonymize(f"Contact {secret}")
+
+        assert secret not in caplog.text

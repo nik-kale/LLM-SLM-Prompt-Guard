@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import List, Dict, Tuple, Any, Optional, Callable
+from typing import List, Dict, Tuple, Any, Optional, Callable, Union
 import pathlib
 import re
 
 import yaml
 
+from .detectors.base import BaseDetector
+from .detectors.enhanced_regex_detector import EnhancedRegexDetector
 from .detectors.regex_detector import RegexDetector
 from .types import (
     DetectorResult,
@@ -43,7 +45,7 @@ class PromptGuard:
 
     def __init__(
         self,
-        detectors: List[str] | None = None,
+        detectors: List[Union[str, BaseDetector]] | None = None,
         policy: str = "default_pii",
         custom_policy_path: str | None = None,
         overlap_strategy: OverlapStrategy = OverlapStrategy.LONGEST_MATCH,
@@ -52,7 +54,9 @@ class PromptGuard:
         Initialize PromptGuard.
 
         Args:
-            detectors: List of detector backend names. Currently supports: ["regex"]
+            detectors: Detector backend names ("regex", "enhanced_regex",
+                "presidio", "spacy") and/or BaseDetector instances.
+                Defaults to ["regex"].
             policy: Name of built-in policy to use (e.g., "default_pii")
             custom_policy_path: Path to a custom policy YAML file
             overlap_strategy: Strategy for resolving overlapping entity detections
@@ -61,12 +65,16 @@ class PromptGuard:
         self.policy = self._load_policy(policy, custom_policy_path)
         self.overlap_strategy = overlap_strategy
 
-    def _init_detectors(self, names: List[str]):
-        """Initialize detector backends."""
-        instances = []
+    def _init_detectors(self, names: List[Union[str, BaseDetector]]) -> List[BaseDetector]:
+        """Initialize detector backends from names or detector instances."""
+        instances: List[BaseDetector] = []
         for name in names:
-            if name == "regex":
+            if isinstance(name, BaseDetector):
+                instances.append(name)
+            elif name == "regex":
                 instances.append(RegexDetector())
+            elif name == "enhanced_regex":
+                instances.append(EnhancedRegexDetector())
             elif name == "presidio":
                 try:
                     from .detectors.presidio_detector import PresidioDetector
@@ -76,10 +84,17 @@ class PromptGuard:
                         "Presidio detector is not available. "
                         "Install it with: pip install presidio-analyzer"
                     )
+            elif name == "spacy":
+                try:
+                    from .detectors.spacy_detector import SpacyDetector
+                    instances.append(SpacyDetector())
+                except ImportError as e:
+                    raise ValueError(f"spaCy detector is not available: {e}") from e
             else:
                 raise ValueError(
                     f"Unknown detector backend: {name}. "
-                    f"Currently supported: ['regex', 'presidio']"
+                    "Currently supported: ['regex', 'enhanced_regex', 'presidio', 'spacy'] "
+                    "or a BaseDetector instance"
                 )
         return instances
 

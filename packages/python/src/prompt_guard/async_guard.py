@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import List, Dict, Tuple, Any, AsyncIterator, Optional
+from typing import List, Dict, Tuple, Any, AsyncIterator, Optional, Union
 
+from .detectors.base import BaseDetector
 from .guard import PromptGuard
 from .types import (
     DetectorResult,
@@ -46,7 +47,7 @@ class AsyncPromptGuard:
 
     def __init__(
         self,
-        detectors: List[str] | None = None,
+        detectors: List[Union[str, BaseDetector]] | None = None,
         policy: str = "default_pii",
         custom_policy_path: str | None = None,
         max_concurrent: int = 10,
@@ -56,7 +57,7 @@ class AsyncPromptGuard:
         Initialize AsyncPromptGuard.
 
         Args:
-            detectors: List of detector backend names
+            detectors: Detector backend names and/or BaseDetector instances
             policy: Name of built-in policy to use
             custom_policy_path: Path to a custom policy YAML file
             max_concurrent: Maximum concurrent operations for batch processing
