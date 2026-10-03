@@ -2,6 +2,8 @@
 Comprehensive integration tests for framework adapters.
 """
 
+import importlib.util
+
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
 from prompt_guard import PromptGuard
@@ -11,7 +13,7 @@ class TestLangChainAdapter:
     """Integration tests for LangChain adapter."""
 
     @pytest.mark.skipif(
-        not pytest.importorskip("langchain", minversion=None),
+        importlib.util.find_spec("langchain") is None,
         reason="LangChain not installed",
     )
     def test_protected_llm_basic(self):
@@ -32,7 +34,7 @@ class TestLangChainAdapter:
         assert "john@example.com" not in base_llm.queries[0]  # PII should be masked
 
     @pytest.mark.skipif(
-        not pytest.importorskip("langchain", minversion=None),
+        importlib.util.find_spec("langchain") is None,
         reason="LangChain not installed",
     )
     def test_protected_chat_llm(self):
@@ -222,8 +224,8 @@ class TestEnhancedDetector:
         results = detector.detect(btc_text)
         assert any(r.entity_type == "CRYPTO_ADDRESS" for r in results)
 
-        # Ethereum address
-        eth_text = "Send to: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+        # Ethereum address (40 hex digits; the previous sample had 39)
+        eth_text = "Send to: 0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
         results = detector.detect(eth_text)
         assert any(r.entity_type == "CRYPTO_ADDRESS" for r in results)
 
@@ -247,7 +249,8 @@ class TestPolicies:
 
     def test_hipaa_policy(self):
         """Test HIPAA/PHI policy."""
-        guard = PromptGuard(policy="hipaa_phi")
+        # MRNs are only recognised by the enhanced regex detector
+        guard = PromptGuard(detectors=["regex", "enhanced_regex"], policy="hipaa_phi")
 
         patient_data = """
         Patient: John Smith

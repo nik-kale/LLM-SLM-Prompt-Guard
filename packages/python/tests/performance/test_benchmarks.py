@@ -136,8 +136,7 @@ class TestBatchPerformance:
 class TestAsyncPerformance:
     """Benchmark async operations."""
 
-    @pytest.mark.asyncio
-    async def test_async_single(self, benchmark):
+    def test_async_single(self, benchmark):
         """Benchmark single async anonymization."""
         guard = AsyncPromptGuard()
         text = "Email: john@example.com"
@@ -145,13 +144,12 @@ class TestAsyncPerformance:
         async def async_anonymize():
             return await guard.anonymize_async(text)
 
-        # pytest-benchmark doesn't support async directly
-        # So we run it synchronously
+        # pytest-benchmark doesn't support async directly, so each round runs
+        # its own event loop (asyncio.run cannot be called inside a running loop)
         result = benchmark(lambda: asyncio.run(async_anonymize()))
         assert result[0] is not None
 
-    @pytest.mark.asyncio
-    async def test_async_batch_10(self, benchmark):
+    def test_async_batch_10(self, benchmark):
         """Benchmark async batch of 10 texts."""
         guard = AsyncPromptGuard()
         texts = [f"Email: user{i}@example.com" for i in range(10)]
@@ -221,8 +219,8 @@ class TestLatencyDistribution:
 
     def test_p50_p95_p99_latency(self):
         """Test latency percentiles."""
+        import statistics
         import time
-        import numpy as np
 
         guard = PromptGuard()
         text = "Email: john@example.com, Phone: 555-123-4567"
@@ -237,9 +235,8 @@ class TestLatencyDistribution:
             latencies.append((end - start) * 1000)  # Convert to ms
 
         # Calculate percentiles
-        p50 = np.percentile(latencies, 50)
-        p95 = np.percentile(latencies, 95)
-        p99 = np.percentile(latencies, 99)
+        cut_points = statistics.quantiles(latencies, n=100)
+        p50, p95, p99 = cut_points[49], cut_points[94], cut_points[98]
 
         print(f"\nLatency Distribution:")
         print(f"  P50: {p50:.2f}ms")

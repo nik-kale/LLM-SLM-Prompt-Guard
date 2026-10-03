@@ -295,26 +295,6 @@ class TestStorageSecurity:
             pytest.skip(f"Redis not available: {e}")
 
 
-class TestProxySecurity:
-    """Test HTTP proxy security."""
-
-    def test_request_size_limit(self):
-        """Test that proxy limits request size (prevents DoS)."""
-        # This would be tested in the proxy itself
-        # Placeholder for proxy security tests
-        pass
-
-    def test_rate_limiting(self):
-        """Test rate limiting functionality."""
-        # Placeholder for rate limiting tests
-        pass
-
-    def test_no_sensitive_headers_leaked(self):
-        """Test that sensitive headers are not leaked."""
-        # Placeholder for header security tests
-        pass
-
-
 class TestComplianceSecurity:
     """Test compliance-related security."""
 
@@ -330,14 +310,27 @@ class TestComplianceSecurity:
 
     def test_pci_dss_cvv_never_stored(self):
         """Test that CVV is never stored (PCI-DSS requirement)."""
-        guard = PromptGuard(policy="pci_dss")
+        import re
 
-        text = "Card: 4532-1234-5678-9010, CVV: 123"
+        from prompt_guard.detectors import BaseDetector, RegexDetector
+        from prompt_guard.types import DetectorResult
+
+        class CvvDetector(BaseDetector):
+            def detect(self, text):
+                return [
+                    DetectorResult("CVV", m.start(1), m.end(1), m.group(1))
+                    for m in re.finditer(r"CVV: (\d{3,4})", text)
+                ]
+
+        guard = PromptGuard(detectors=[RegexDetector(), CvvDetector()], policy="pci_dss")
+
+        text = "Card: 4532-1234-5678-9010, CVV: 737"
         anonymized, mapping = guard.anonymize(text)
 
-        # CVV should not be in the mapping (should be redacted, not stored)
-        cvv_in_mapping = any("123" in str(v) for v in mapping.values())
-        assert not cvv_in_mapping  # CVV should NOT be in mapping
+        # The CVV is redacted but must not be stored in the mapping
+        assert anonymized == "Card: [PAN_1], CVV: [REDACTED]"
+        assert "737" not in mapping.values()
+        assert mapping == {"[PAN_1]": "4532-1234-5678-9010"}
 
 
 class TestSideChannelAttacks:
