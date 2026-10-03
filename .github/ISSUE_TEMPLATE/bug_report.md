@@ -40,6 +40,6 @@ guard = PromptGuard(...)
 Add any other context about the problem here.
 
 ## Stack trace (if applicable)
-```
+```text
 Paste full stack trace here
 ```

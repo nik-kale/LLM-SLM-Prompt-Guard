@@ -5,10 +5,10 @@ Provides persistent, distributed storage for PII mappings across
 multiple instances and sessions.
 """
 
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +18,10 @@ try:
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
-    logger.warning("Redis not available. Install with: pip install redis")
+    logger.debug("Redis not available. Install with: pip install redis")
 
 
-class RedisMapping Storage:
+class RedisMappingStorage:
     """
     Redis-based storage for PII mappings.
 
@@ -176,7 +176,8 @@ class RedisMapping Storage:
         if self.enable_audit:
             self._audit_log("mapping_retrieved", session_id, {})
 
-        return json.loads(data)
+        mapping: Dict[str, str] = json.loads(data)
+        return mapping
 
     def delete_mapping(self, session_id: str) -> bool:
         """
@@ -189,7 +190,8 @@ class RedisMapping Storage:
             True if deleted, False if not found
         """
         mapping_key = self._make_key(session_id, "mapping")
-        result = self.client.delete(mapping_key) > 0
+        deleted: int = self.client.delete(mapping_key)
+        result = deleted > 0
 
         if result and self.enable_audit:
             self._audit_log("mapping_deleted", session_id, {})
@@ -214,7 +216,7 @@ class RedisMapping Storage:
             return False  # Key doesn't exist or has no expiry
 
         new_ttl = current_ttl + additional_seconds
-        return self.client.expire(mapping_key, new_ttl)
+        return bool(self.client.expire(mapping_key, new_ttl))
 
     def list_sessions(
         self,
@@ -298,7 +300,7 @@ class RedisMapping Storage:
 
         return logs
 
-    def health_check(self) -> Dict[str, any]:
+    def health_check(self) -> Dict[str, Any]:
         """
         Check Redis connection health.
 

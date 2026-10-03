@@ -11,14 +11,17 @@ This detector provides comprehensive pattern matching for:
 - And more...
 """
 
+import bisect
 import re
-from typing import List, Dict, Pattern
+from typing import List, Optional, Pattern
 from .base import BaseDetector
 from ..types import DetectorResult
 
-# Email (RFC 5322 compliant)
+# Email (RFC 5322 compliant). The lookbehind anchors the local part to the start
+# of a run of local-part characters so a long run without "@" is scanned once
+# instead of once per offset (quadratic backtracking).
 EMAIL_RE = re.compile(
-    r"\b[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b"
+    r"(?<![a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-])[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b"
 )
 
 # International phone numbers
@@ -153,7 +156,7 @@ class EnhancedRegexDetector(BaseDetector):
     - CRYPTO_ADDRESS: Cryptocurrency addresses (BTC, ETH)
     """
 
-    def __init__(self, enable_all: bool = True, entity_types: List[str] = None):
+    def __init__(self, enable_all: bool = True, entity_types: Optional[List[str]] = None):
         """
         Initialize enhanced regex detector.
 
@@ -232,7 +235,10 @@ class EnhancedRegexDetector(BaseDetector):
             List of detected PII entities
         """
         results: List[DetectorResult] = []
-        seen_spans = set()  # Track (start, end) to avoid duplicates
+        # Accepted spans are kept disjoint and sorted by start, so a new match
+        # only needs to be compared with its two neighbours.
+        span_starts: List[int] = []
+        span_ends: List[int] = []
 
         # Sort patterns by priority (descending)
         sorted_patterns = sorted(self.patterns, key=lambda x: x[2], reverse=True)
@@ -242,25 +248,26 @@ class EnhancedRegexDetector(BaseDetector):
                 continue
 
             for match in pattern.finditer(text):
-                span = (match.start(), match.end())
+                start, end = match.start(), match.end()
 
                 # Skip if this span overlaps with a higher-priority match
-                overlaps = any(
-                    start <= match.start() < end or start < match.end() <= end
-                    for start, end in seen_spans
-                )
+                i = bisect.bisect_right(span_starts, start)
+                if i > 0 and span_ends[i - 1] > start:
+                    continue
+                if i < len(span_starts) and span_starts[i] < end:
+                    continue
 
-                if not overlaps:
-                    results.append(
-                        DetectorResult(
-                            entity_type=entity_type,
-                            start=match.start(),
-                            end=match.end(),
-                            text=match.group(0),
-                            confidence=priority / 100.0,  # Convert to 0-1 scale
-                        )
+                results.append(
+                    DetectorResult(
+                        entity_type=entity_type,
+                        start=start,
+                        end=end,
+                        text=match.group(0),
+                        confidence=priority / 100.0,  # Convert to 0-1 scale
                     )
-                    seen_spans.add(span)
+                )
+                span_starts.insert(i, start)
+                span_ends.insert(i, end)
 
         return results
 
@@ -268,7 +275,7 @@ class EnhancedRegexDetector(BaseDetector):
 # Convenience function
 def create_enhanced_detector(
     enable_all: bool = True,
-    entity_types: List[str] = None
+    entity_types: Optional[List[str]] = None
 ) -> EnhancedRegexDetector:
     """Create an enhanced regex detector instance."""
     return EnhancedRegexDetector(enable_all=enable_all, entity_types=entity_types)

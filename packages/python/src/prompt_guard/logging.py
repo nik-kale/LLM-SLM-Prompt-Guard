@@ -4,9 +4,9 @@ Structured JSON logging for Prompt Guard with correlation IDs and context enrich
 
 import logging
 import json
+import traceback
 import uuid
-import time
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from contextvars import ContextVar
 from datetime import datetime
 
@@ -30,18 +30,23 @@ class JSONFormatter(logging.Formatter):
     - session_id: PII session identifier
     - user_id: User identifier
     - context: Additional context fields
-    - exception: Exception details if present
+    - exception: Exception type and stack frames if present
     """
     
-    def __init__(self, include_extra: bool = True):
+    def __init__(self, include_extra: bool = True, include_exception_messages: bool = False):
         """
         Initialize JSON formatter.
         
         Args:
             include_extra: Include extra fields from log record
+            include_exception_messages: Include exception messages and the
+                full formatted traceback. Off by default because exception
+                text often quotes the input being processed, which for this
+                package is the PII it is protecting.
         """
         super().__init__()
         self.include_extra = include_extra
+        self.include_exception_messages = include_exception_messages
     
     def format(self, record: logging.LogRecord) -> str:
         """
@@ -54,7 +59,7 @@ class JSONFormatter(logging.Formatter):
             JSON-formatted log string
         """
         # Base log structure
-        log_data = {
+        log_data: Dict[str, Any] = {
             "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
             "level": record.levelname,
             "logger": record.name,
@@ -83,11 +88,19 @@ class JSONFormatter(logging.Formatter):
         
         # Add exception info if present
         if record.exc_info:
-            log_data["exception"] = {
-                "type": record.exc_info[0].__name__ if record.exc_info[0] else None,
-                "message": str(record.exc_info[1]) if record.exc_info[1] else None,
-                "traceback": self.formatException(record.exc_info),
-            }
+            exc_type, exc_value, exc_tb = record.exc_info
+            if self.include_exception_messages:
+                log_data["exception"] = {
+                    "type": exc_type.__name__ if exc_type else None,
+                    "message": str(exc_value) if exc_value else None,
+                    "traceback": self.formatException(record.exc_info),
+                }
+            else:
+                # Stack frames locate the failure without the message text
+                log_data["exception"] = {
+                    "type": exc_type.__name__ if exc_type else None,
+                    "traceback": "".join(traceback.format_tb(exc_tb)) if exc_tb else None,
+                }
         
         # Add extra fields (excluding standard fields)
         if self.include_extra:
@@ -96,7 +109,7 @@ class JSONFormatter(logging.Formatter):
                 "levelname", "levelno", "lineno", "module", "msecs",
                 "message", "pathname", "process", "processName",
                 "relativeCreated", "thread", "threadName", "exc_info",
-                "exc_text", "stack_info",
+                "exc_text", "stack_info", "taskName",
             }
             
             extra_fields = {}
@@ -140,6 +153,7 @@ class StructuredLogger:
         name: str,
         level: int = logging.INFO,
         json_format: bool = True,
+        add_handler: bool = True,
     ):
         """
         Initialize structured logger.
@@ -148,8 +162,14 @@ class StructuredLogger:
             name: Logger name
             level: Logging level
             json_format: Use JSON formatting
+            add_handler: Attach a stream handler and set the level on the
+                logger. Pass False to only wrap the logger and leave output
+                to configure_logging() or the application's logging setup.
         """
         self.logger = logging.getLogger(name)
+        if not add_handler:
+            return
+
         self.logger.setLevel(level)
         
         # Remove existing handlers to avoid duplicates
@@ -158,6 +178,7 @@ class StructuredLogger:
         # Create handler
         handler = logging.StreamHandler()
         
+        formatter: logging.Formatter
         if json_format:
             formatter = JSONFormatter()
         else:
@@ -242,6 +263,7 @@ def configure_logging(
     
     handler = logging.StreamHandler()
     
+    formatter: logging.Formatter
     if json_format:
         formatter = JSONFormatter()
     else:
@@ -260,13 +282,23 @@ def configure_logging(
             component_logger.setLevel(numeric_component_level)
 
 
+# A library must not configure logging on import: the package logger gets a
+# NullHandler, and output is enabled by configure_logging() or by the
+# application's own logging configuration.
+logging.getLogger("prompt_guard").addHandler(logging.NullHandler())
+
 # Default logger instance
-default_logger = StructuredLogger("prompt_guard")
+default_logger = StructuredLogger("prompt_guard", add_handler=False)
 
 
 def get_logger(name: str) -> StructuredLogger:
     """
     Get a structured logger instance.
+
+    The logger propagates to the "prompt_guard" logger, so call
+    configure_logging() (or configure logging in the application) to see its
+    output. It does not add a handler of its own, which used to print every
+    record twice once configure_logging() had run.
     
     Args:
         name: Logger name
@@ -274,5 +306,5 @@ def get_logger(name: str) -> StructuredLogger:
     Returns:
         StructuredLogger instance
     """
-    return StructuredLogger(f"prompt_guard.{name}")
+    return StructuredLogger(f"prompt_guard.{name}", add_handler=False)
 

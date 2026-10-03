@@ -2,9 +2,10 @@
 Unit tests for PromptGuard core functionality.
 """
 
+import importlib.util
+
 import pytest
 from prompt_guard import PromptGuard
-from prompt_guard.types import AnonymizeOptions
 
 
 class TestPromptGuardBasic:
@@ -134,7 +135,7 @@ class TestPromptGuardDetectors:
         assert len(mapping) > 0
 
     @pytest.mark.skipif(
-        not pytest.importorskip("presidio_analyzer", minversion=None),
+        importlib.util.find_spec("presidio_analyzer") is None,
         reason="Presidio not installed",
     )
     def test_presidio_detector(self):

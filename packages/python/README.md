@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://pypi.org/project/llm-slm-prompt-guard/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](../../LICENSE)
 
 Python implementation of policy-driven PII detection, anonymization, and de-anonymization for Large Language Model (LLM) and Small Language Model (SLM) applications.
 
@@ -57,14 +57,14 @@ from prompt_guard import PromptGuard
 guard = PromptGuard(policy="default_pii")
 
 # Anonymize text
-text = "Contact John Smith at john@example.com or call 555-123-4567"
+text = "Please contact John Smith at john@example.com or call 555-123-4567"
 anonymized, mapping = guard.anonymize(text)
 
 print(anonymized)
-# Output: "Contact [PERSON_1] at [EMAIL_1] or call [PHONE_1]"
+# Output: "Please contact [NAME_1] at [EMAIL_1] or call [PHONE_1]"
 
 # De-anonymize response
-response = "I'll contact [PERSON_1] at [EMAIL_1]"
+response = "I'll contact [NAME_1] at [EMAIL_1]"
 original = guard.deanonymize(response, mapping)
 
 print(original)
@@ -93,7 +93,7 @@ from prompt_guard import PromptGuard
 from prompt_guard.cache import RedisCache, CachedPromptGuard
 
 # Create Redis cache
-cache = RedisCache(redis_url="redis://localhost:6379", ttl=3600)
+cache = RedisCache(redis_url="redis://localhost:6379", default_ttl=3600)
 
 # Wrap guard with caching (3-5x performance boost)
 guard = PromptGuard(policy="default_pii")
@@ -209,7 +209,7 @@ guard = PromptGuard(policy="default_pii")
 # HIPAA compliance (18 PHI identifiers, 7-year retention)
 guard = PromptGuard(policy="hipaa_phi")
 
-# PCI-DSS (payment card data, CVV never stored)
+# PCI-DSS (payment card data; CVV/PIN are redacted but never stored when detected)
 guard = PromptGuard(policy="pci_dss")
 
 # GDPR strict (EU privacy requirements)
@@ -228,11 +228,11 @@ guard = PromptGuard(custom_policy_path="my_policy.yaml")
 from prompt_guard.detectors import SpacyDetector
 
 # Spanish
-spacy_es = SpacyDetector(model="es_core_news_sm", language="es")
+spacy_es = SpacyDetector(model="es_core_news_sm")
 guard = PromptGuard(detectors=[spacy_es])
 
 # French
-spacy_fr = SpacyDetector(model="fr_core_news_sm", language="fr")
+spacy_fr = SpacyDetector(model="fr_core_news_sm")
 guard = PromptGuard(detectors=[spacy_fr])
 
 # Or use Presidio for 50+ languages
@@ -301,7 +301,7 @@ pytest tests/security/
 pytest --cov=prompt_guard --cov-report=html
 ```
 
-Test coverage: 85%+ (100+ test cases)
+Test coverage is reported by the CI workflow.
 
 ## Development
 
@@ -323,21 +323,18 @@ pip install -e ".[dev]"
 pytest
 
 # Run linting
-ruff check src/
+ruff check src/ tests/
 
 # Run type checking
-mypy src/
-
-# Format code
-ruff format src/
+mypy src/ --ignore-missing-imports
 
 # Run all checks
-pytest && ruff check src/ && mypy src/
+pytest && ruff check src/ tests/ && mypy src/ --ignore-missing-imports
 ```
 
 ### Project Structure
 
-```
+```text
 packages/python/
 ├── src/prompt_guard/
 │   ├── __init__.py          # Main exports
@@ -400,9 +397,8 @@ We welcome contributions! See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for
 
 ## Support
 
-- **GitHub Issues**: https://github.com/nik-kale/llm-slm-prompt-guard/issues
-- **Discussions**: https://github.com/nik-kale/llm-slm-prompt-guard/discussions
-- **Documentation**: https://docs.prompt-guard.com (coming soon)
+- **GitHub Issues**: <https://github.com/nik-kale/llm-slm-prompt-guard/issues>
+- **Documentation**: <https://docs.prompt-guard.com> (coming soon)
 
 ---
 

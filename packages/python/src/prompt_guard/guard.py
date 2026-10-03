@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import List, Dict, Tuple, Any, Optional
-import yaml
+from typing import List, Dict, Tuple, Any, Optional, Callable, Sequence, Union
 import pathlib
+import re
 
+import yaml
+
+from .detectors.base import BaseDetector
+from .detectors.enhanced_regex_detector import EnhancedRegexDetector
 from .detectors.regex_detector import RegexDetector
 from .types import (
     DetectorResult,
@@ -13,7 +17,16 @@ from .types import (
     DetectionReport,
     OverlapStrategy,
 )
-from .report import generate_detection_report
+from .report import generate_detection_report, HIGH_RISK_ENTITIES, MEDIUM_RISK_ENTITIES
+
+
+def _risk_rank(entity_type: str) -> int:
+    """Rank entity types by sensitivity, used to break ties between overlaps."""
+    if entity_type in HIGH_RISK_ENTITIES:
+        return 2
+    if entity_type in MEDIUM_RISK_ENTITIES:
+        return 1
+    return 0
 
 
 class PromptGuard:
@@ -32,7 +45,7 @@ class PromptGuard:
 
     def __init__(
         self,
-        detectors: List[str] | None = None,
+        detectors: Sequence[Union[str, BaseDetector]] | None = None,
         policy: str = "default_pii",
         custom_policy_path: str | None = None,
         overlap_strategy: OverlapStrategy = OverlapStrategy.LONGEST_MATCH,
@@ -41,7 +54,9 @@ class PromptGuard:
         Initialize PromptGuard.
 
         Args:
-            detectors: List of detector backend names. Currently supports: ["regex"]
+            detectors: Detector backend names ("regex", "enhanced_regex",
+                "presidio", "spacy") and/or BaseDetector instances.
+                Defaults to ["regex"].
             policy: Name of built-in policy to use (e.g., "default_pii")
             custom_policy_path: Path to a custom policy YAML file
             overlap_strategy: Strategy for resolving overlapping entity detections
@@ -50,12 +65,16 @@ class PromptGuard:
         self.policy = self._load_policy(policy, custom_policy_path)
         self.overlap_strategy = overlap_strategy
 
-    def _init_detectors(self, names: List[str]):
-        """Initialize detector backends."""
-        instances = []
+    def _init_detectors(self, names: Sequence[Union[str, BaseDetector]]) -> List[BaseDetector]:
+        """Initialize detector backends from names or detector instances."""
+        instances: List[BaseDetector] = []
         for name in names:
-            if name == "regex":
+            if isinstance(name, BaseDetector):
+                instances.append(name)
+            elif name == "regex":
                 instances.append(RegexDetector())
+            elif name == "enhanced_regex":
+                instances.append(EnhancedRegexDetector())
             elif name == "presidio":
                 try:
                     from .detectors.presidio_detector import PresidioDetector
@@ -65,10 +84,17 @@ class PromptGuard:
                         "Presidio detector is not available. "
                         "Install it with: pip install presidio-analyzer"
                     )
+            elif name == "spacy":
+                try:
+                    from .detectors.spacy_detector import SpacyDetector
+                    instances.append(SpacyDetector())
+                except ImportError as e:
+                    raise ValueError(f"spaCy detector is not available: {e}") from e
             else:
                 raise ValueError(
                     f"Unknown detector backend: {name}. "
-                    f"Currently supported: ['regex', 'presidio']"
+                    "Currently supported: ['regex', 'enhanced_regex', 'presidio', 'spacy'] "
+                    "or a BaseDetector instance"
                 )
         return instances
 
@@ -87,144 +113,178 @@ class PromptGuard:
             raise FileNotFoundError(f"Policy file not found: {policy_path}")
 
         with policy_path.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+            policy = yaml.safe_load(f)
+        if not isinstance(policy, dict):
+            raise ValueError(f"Policy file must contain a YAML mapping: {policy_path}")
+        return policy
 
-    def _resolve_overlaps(self, results: List[DetectorResult]) -> List[DetectorResult]:
+    def _resolve_overlaps(
+        self,
+        results: List[DetectorResult],
+        text: Optional[str] = None,
+    ) -> List[DetectorResult]:
         """
         Resolve overlapping entity detections based on configured strategy.
-        
+
+        Overlapping detections are grouped into clusters. The strategy decides
+        which detection in a cluster supplies the entity type and confidence,
+        and the resolved entity spans the whole cluster, so no character that
+        any detector flagged is left in the output.
+
         Args:
             results: List of detected entities (may contain overlaps)
-        
+            text: Original text, used to fill in the text of widened entities
+
         Returns:
-            List of non-overlapping entities
+            List of non-overlapping entities sorted by start position
         """
         if not results:
-            return results
-        
-        # Sort by start position
-        sorted_results = sorted(results, key=lambda r: (r.start, r.end))
-        
-        if self.overlap_strategy == OverlapStrategy.LONGEST_MATCH:
-            return self._resolve_by_longest(sorted_results)
-        elif self.overlap_strategy == OverlapStrategy.HIGHEST_CONFIDENCE:
-            return self._resolve_by_confidence(sorted_results)
-        elif self.overlap_strategy == OverlapStrategy.FIRST_DETECTOR:
-            return self._resolve_by_order(sorted_results)
-        elif self.overlap_strategy == OverlapStrategy.MERGE_SAME_TYPE:
-            return self._resolve_by_merge(sorted_results)
-        else:
-            return self._resolve_by_longest(sorted_results)  # Default
-    
+            return []
+
+        indexed = list(enumerate(results))
+        if self.overlap_strategy == OverlapStrategy.MERGE_SAME_TYPE:
+            indexed = self._merge_same_type(indexed)
+
+        rank = self._cluster_rank_key()
+        indexed.sort(key=lambda item: (item[1].start, item[1].end))
+
+        resolved: List[DetectorResult] = []
+        cluster = [indexed[0]]
+        cluster_end = indexed[0][1].end
+        for item in indexed[1:]:
+            if item[1].start < cluster_end:
+                cluster.append(item)
+                cluster_end = max(cluster_end, item[1].end)
+            else:
+                resolved.append(self._collapse_cluster(cluster, rank, text))
+                cluster = [item]
+                cluster_end = item[1].end
+        resolved.append(self._collapse_cluster(cluster, rank, text))
+        return resolved
+
     def _has_overlap(self, r1: DetectorResult, r2: DetectorResult) -> bool:
         """Check if two detection results overlap."""
         return not (r1.end <= r2.start or r2.end <= r1.start)
-    
-    def _resolve_by_longest(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Keep longest span when entities overlap."""
-        filtered = []
-        for result in results:
-            # Check if this result overlaps with any already accepted result
-            overlaps = False
-            for accepted in filtered:
-                if self._has_overlap(result, accepted):
-                    # Keep the longer one
-                    if (result.end - result.start) > (accepted.end - accepted.start):
-                        filtered.remove(accepted)
-                        filtered.append(result)
-                    overlaps = True
-                    break
-            
-            if not overlaps:
-                filtered.append(result)
-        
-        return filtered
-    
-    def _resolve_by_confidence(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Keep highest confidence detection when entities overlap."""
-        filtered = []
-        for result in results:
-            overlaps = False
-            for accepted in filtered:
-                if self._has_overlap(result, accepted):
-                    # Compare confidence scores (treat None as 1.0)
-                    result_conf = result.confidence if result.confidence is not None else 1.0
-                    accepted_conf = accepted.confidence if accepted.confidence is not None else 1.0
-                    
-                    if result_conf > accepted_conf:
-                        filtered.remove(accepted)
-                        filtered.append(result)
-                    overlaps = True
-                    break
-            
-            if not overlaps:
-                filtered.append(result)
-        
-        return filtered
-    
-    def _resolve_by_order(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Keep first detection when entities overlap (detector order priority)."""
-        filtered = []
-        for result in results:
-            # Check if this result overlaps with any already accepted result
-            has_overlap = any(self._has_overlap(result, accepted) for accepted in filtered)
-            if not has_overlap:
-                filtered.append(result)
-        
-        return filtered
-    
-    def _resolve_by_merge(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Merge overlapping entities of the same type."""
-        filtered = []
-        for result in results:
-            merged = False
-            for i, accepted in enumerate(filtered):
-                if (self._has_overlap(result, accepted) and 
-                    result.entity_type == accepted.entity_type):
-                    # Merge: take span from start of first to end of last
-                    merged_start = min(result.start, accepted.start)
-                    merged_end = max(result.end, accepted.end)
-                    # Use average confidence if both have it
-                    if result.confidence and accepted.confidence:
-                        merged_conf = (result.confidence + accepted.confidence) / 2
-                    else:
-                        merged_conf = result.confidence or accepted.confidence
-                    
-                    # Create merged result
-                    merged_result = DetectorResult(
-                        entity_type=result.entity_type,
-                        start=merged_start,
-                        end=merged_end,
-                        text="",  # Will be filled during anonymization
-                        confidence=merged_conf,
+
+    def _cluster_rank_key(self) -> Callable[[Tuple[int, DetectorResult]], Tuple[float, ...]]:
+        """
+        Return the sort key that orders a cluster's detections best-first.
+
+        Items are (detector order index, result) pairs. Ties on length are
+        broken in favour of the higher-risk entity type, so an SSN that a
+        broad phone pattern also matches is labelled as an SSN.
+        """
+
+        def length(r: DetectorResult) -> int:
+            return r.end - r.start
+
+        def confidence(r: DetectorResult) -> float:
+            return r.confidence if r.confidence is not None else 1.0
+
+        if self.overlap_strategy == OverlapStrategy.HIGHEST_CONFIDENCE:
+            return lambda item: (
+                -confidence(item[1]),
+                -length(item[1]),
+                -_risk_rank(item[1].entity_type),
+                item[0],
+            )
+        if self.overlap_strategy == OverlapStrategy.FIRST_DETECTOR:
+            return lambda item: (item[0],)
+        # LONGEST_MATCH, and MERGE_SAME_TYPE for overlaps across types
+        return lambda item: (-length(item[1]), -_risk_rank(item[1].entity_type), item[0])
+
+    @staticmethod
+    def _collapse_cluster(
+        cluster: List[Tuple[int, DetectorResult]],
+        rank: Callable[[Tuple[int, DetectorResult]], Tuple[float, ...]],
+        text: Optional[str],
+    ) -> DetectorResult:
+        """Reduce a cluster of overlapping detections to one entity covering all of them."""
+        winner = min(cluster, key=rank)[1]
+        start = min(r.start for _, r in cluster)
+        end = max(r.end for _, r in cluster)
+        if start == winner.start and end == winner.end and (winner.text or text is None):
+            return winner
+        return DetectorResult(
+            entity_type=winner.entity_type,
+            start=start,
+            end=end,
+            text=text[start:end] if text is not None else winner.text,
+            confidence=winner.confidence,
+        )
+
+    @staticmethod
+    def _merge_same_type(
+        indexed: List[Tuple[int, DetectorResult]],
+    ) -> List[Tuple[int, DetectorResult]]:
+        """Merge overlapping detections of the same entity type into single spans."""
+        by_type: Dict[str, List[Tuple[int, DetectorResult]]] = {}
+        for item in indexed:
+            by_type.setdefault(item[1].entity_type, []).append(item)
+
+        merged: List[Tuple[int, DetectorResult]] = []
+        for entity_type, items in by_type.items():
+            items.sort(key=lambda item: (item[1].start, item[1].end))
+            groups: List[List[Tuple[int, DetectorResult]]] = []
+            group_end = 0
+            for item in items:
+                if groups and item[1].start < group_end:
+                    groups[-1].append(item)
+                    group_end = max(group_end, item[1].end)
+                else:
+                    groups.append([item])
+                    group_end = item[1].end
+
+            for group in groups:
+                if len(group) == 1:
+                    merged.append(group[0])
+                    continue
+                scores = [r.confidence for _, r in group if r.confidence is not None]
+                merged.append(
+                    (
+                        min(i for i, _ in group),
+                        DetectorResult(
+                            entity_type=entity_type,
+                            start=min(r.start for _, r in group),
+                            end=max(r.end for _, r in group),
+                            text="",  # filled in from the source text when resolved
+                            confidence=sum(scores) / len(scores) if scores else None,
+                        ),
                     )
-                    filtered[i] = merged_result
-                    merged = True
-                    break
-            
-            if not merged:
-                filtered.append(result)
-        
-        return filtered
+                )
+        merged.sort(key=lambda item: item[0])
+        return merged
 
     def anonymize(
         self,
         text: str,
         options: Optional[AnonymizeOptions] = None,
         min_confidence: Optional[float] = None,
+        *,
+        existing_mapping: Optional[Mapping] = None,
     ) -> AnonymizeResult:
         """
         Anonymize PII in the given text.
+
+        Repeated values share one placeholder, and placeholders are unique
+        within the returned mapping even when several entity types use the
+        same placeholder template.
 
         Args:
             text: The text to anonymize
             options: Anonymization options (takes precedence over min_confidence)
             min_confidence: Minimum confidence threshold for ML detectors (0.0-1.0)
                           Shorthand for options.min_confidence
+            existing_mapping: A mapping returned by an earlier call. Values it
+                already contains keep their placeholders, and new placeholders
+                are numbered so they never collide with it. Use this when
+                several texts (chat messages, conversation turns, stream
+                chunks) are de-anonymized with one mapping. It is not modified.
 
         Returns:
             A tuple of (anonymized_text, mapping) where mapping is a dict
-            of placeholder -> original value
+            of placeholder -> original value. When ``existing_mapping`` is
+            given, the returned mapping also contains its entries.
         """
         # Handle options
         if options is None:
@@ -232,10 +292,25 @@ class PromptGuard:
             if min_confidence is not None:
                 options.min_confidence = min_confidence
 
+        return self._anonymize_with_results(
+            text, self._detect(text), options, existing_mapping
+        )
+
+    def _detect(self, text: str) -> List[DetectorResult]:
+        """Run every configured detector over the text."""
         all_results: List[DetectorResult] = []
         for detector in self.detectors:
             all_results.extend(detector.detect(text))
+        return all_results
 
+    def _anonymize_with_results(
+        self,
+        text: str,
+        all_results: List[DetectorResult],
+        options: AnonymizeOptions,
+        existing_mapping: Optional[Mapping] = None,
+    ) -> AnonymizeResult:
+        """Replace detected entities in ``text`` with placeholders."""
         # Filter by confidence if needed
         if options.min_confidence > 0:
             all_results = [
@@ -243,45 +318,67 @@ class PromptGuard:
                 if r.confidence is None or r.confidence >= options.min_confidence
             ]
 
-        # Resolve overlapping entities
-        all_results = self._resolve_overlaps(all_results)
-
-        # Sort by start index so replacements are stable
-        all_results.sort(key=lambda r: r.start)
-
         policy_entities = self.policy.get("entities", {})
-        mapping: Mapping = {}
+
+        # Only entity types the policy redacts take part in overlap resolution.
+        # Otherwise an unconfigured type (e.g. a PHONE match over an SSN under a
+        # policy without PHONE) could win the overlap and then be skipped,
+        # leaving the configured entity in the output.
+        all_results = [r for r in all_results if policy_entities.get(r.entity_type)]
+
+        # Resolve overlapping entities (result is sorted by start index)
+        all_results = self._resolve_overlaps(all_results, text)
+
+        mapping: Mapping = dict(existing_mapping) if existing_mapping else {}
+        placeholder_for: Dict[str, str] = {}
+        for existing_placeholder, original in mapping.items():
+            placeholder_for.setdefault(original, existing_placeholder)
+
         anonymized = []
         last_idx = 0
 
-        # Counter per entity type
+        # Next number per placeholder template
         counters: Dict[str, int] = {}
 
         for res in all_results:
-            entity_cfg = policy_entities.get(res.entity_type)
-            if not entity_cfg:
-                continue  # skip unconfigured entity types
+            entity_cfg = policy_entities[res.entity_type]
+            original = text[res.start : res.end]
+            # Policies can mark values that must never be stored (e.g. CVV
+            # under pci_dss). Those are redacted but kept out of the mapping.
+            storable = entity_cfg.get("storage_allowed", True) is not False
 
             # Add text before this entity
             anonymized.append(text[last_idx : res.start])
 
-            # Compute placeholder
-            counters[res.entity_type] = counters.get(res.entity_type, 0) + 1
-            i = counters[res.entity_type]
-            placeholder_tpl = entity_cfg.get(
-                "placeholder", f"[{res.entity_type}_{{i}}]"
-            )
-            placeholder = placeholder_tpl.format(i=i)
+            placeholder: Optional[str] = placeholder_for.get(original) if storable else None
+            if placeholder is None:
+                template = entity_cfg.get("placeholder", f"[{res.entity_type}_{{i}}]")
+                placeholder = self._next_placeholder(template, counters, mapping)
+                if storable:
+                    mapping[placeholder] = original
+                    placeholder_for[original] = placeholder
 
             anonymized.append(placeholder)
-            mapping[placeholder] = res.text
-
             last_idx = res.end
 
         # Add trailing text
         anonymized.append(text[last_idx:])
 
         return "".join(anonymized), mapping
+
+    @staticmethod
+    def _next_placeholder(template: str, counters: Dict[str, int], mapping: Mapping) -> str:
+        """Return the next placeholder for ``template`` that is not already in use."""
+        if template.format(i=1) == template.format(i=2):
+            # Template without a counter: every entity shares one placeholder.
+            return template.format(i=1)
+        i = counters.get(template, 0)
+        while True:
+            i += 1
+            placeholder = template.format(i=i)
+            if placeholder not in mapping:
+                counters[template] = i
+                return placeholder
 
     def detect_only(
         self,
@@ -306,9 +403,7 @@ class PromptGuard:
         Returns:
             DetectionReport with statistics and risk assessment
         """
-        all_results: List[DetectorResult] = []
-        for detector in self.detectors:
-            all_results.extend(detector.detect(text))
+        all_results = self._detect(text)
         
         # Filter by confidence if specified
         if min_confidence is not None and min_confidence > 0:
@@ -330,10 +425,14 @@ class PromptGuard:
         Returns:
             Text with placeholders replaced by original values
         """
-        result = text
-        for placeholder, original in mapping.items():
-            result = result.replace(placeholder, original)
-        return result
+        placeholders = sorted((p for p in mapping if p), key=len, reverse=True)
+        if not placeholders:
+            return text
+        # One pass, longest placeholder first: with a template such as
+        # "NAME_{i}", "NAME_1" must not match the start of "NAME_10", and
+        # restored values must not be scanned for placeholders again.
+        pattern = re.compile("|".join(re.escape(p) for p in placeholders))
+        return pattern.sub(lambda m: mapping[m.group(0)], text)
 
     def batch_anonymize(
         self,

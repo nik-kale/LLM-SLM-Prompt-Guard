@@ -18,18 +18,19 @@ Usage:
     python main.py --port 8000 --redis-url redis://localhost:6379
 """
 
+from __future__ import annotations
+
 import sys
 import os
-import asyncio
+import copy
 import json
-import logging
 from typing import Dict, Optional, List
 from dataclasses import dataclass
 
 # Add parent package to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../python/src"))
 
-from fastapi import FastAPI, Request, HTTPException, Header, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
@@ -68,6 +69,66 @@ class ProxyConfig:
     burst_size: int = 10
     trusted_ips: List[str] = None
 
+    @classmethod
+    def from_env(cls) -> "ProxyConfig":
+        """
+        Build a configuration from environment variables (PORT, HOST,
+        REDIS_URL, POLICY, DETECTORS, RATE_LIMIT_PER_MINUTE,
+        RATE_LIMIT_PER_HOUR, RATE_LIMIT_BURST, TRUSTED_IPS), which is how
+        the Dockerfile and docker-compose.yml configure the proxy.
+        """
+        def env_list(name: str) -> Optional[List[str]]:
+            value = os.environ.get(name, "")
+            items = [item.strip() for item in value.split(",") if item.strip()]
+            return items or None
+
+        defaults = cls()
+        return cls(
+            port=int(os.environ.get("PORT", defaults.port)),
+            host=os.environ.get("HOST", defaults.host),
+            redis_url=os.environ.get("REDIS_URL", defaults.redis_url),
+            policy=os.environ.get("POLICY", defaults.policy),
+            detectors=env_list("DETECTORS"),
+            requests_per_minute=int(
+                os.environ.get("RATE_LIMIT_PER_MINUTE", defaults.requests_per_minute)
+            ),
+            requests_per_hour=int(
+                os.environ.get("RATE_LIMIT_PER_HOUR", defaults.requests_per_hour)
+            ),
+            burst_size=int(os.environ.get("RATE_LIMIT_BURST", defaults.burst_size)),
+            trusted_ips=env_list("TRUSTED_IPS"),
+        )
+
+
+# Hop-by-hop headers, plus headers that describe a body the proxy rewrites.
+_REQUEST_HEADERS_TO_DROP = {
+    "host",
+    "content-length",
+    "connection",
+    "keep-alive",
+    "transfer-encoding",
+    "upgrade",
+    "proxy-authorization",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "x-user-id",
+}
+_RESPONSE_HEADERS_TO_DROP = {
+    "content-length",
+    "content-encoding",
+    "connection",
+    "keep-alive",
+    "transfer-encoding",
+    "upgrade",
+    "te",
+    "trailer",
+}
+
+
+def _filter_headers(headers, drop) -> Dict[str, str]:
+    return {k: v for k, v in headers.items() if k.lower() not in drop}
+
 
 class LLMProxy:
     """
@@ -89,7 +150,7 @@ class LLMProxy:
         "anthropic": {
             "base_url": "https://api.anthropic.com",
             "auth_header": "x-api-key",
-            "message_paths": ["messages", "prompt"],
+            "message_paths": ["system", "messages", "prompt"],
         },
     }
 
@@ -223,9 +284,10 @@ class LLMProxy:
             # Build target URL
             target_url = f"{provider_config['base_url']}{endpoint}"
 
-            # Forward headers (excluding host)
-            headers = dict(request.headers)
-            headers.pop("host", None)
+            # Forward headers. The body is re-serialized after anonymization,
+            # so the client's Content-Length no longer applies; X-User-ID is a
+            # proxy-side header and is not sent to the provider.
+            headers = _filter_headers(request.headers, _REQUEST_HEADERS_TO_DROP)
             headers["X-Session-ID"] = session_id  # Add session ID for tracking
 
             # Make the proxied request
@@ -253,10 +315,12 @@ class LLMProxy:
                     response_data, mapping, provider_config
                 )
 
+            # httpx has already decoded the body and it is re-serialized, so the
+            # upstream length and encoding headers would be wrong.
             return JSONResponse(
                 content=response_data,
                 status_code=response.status_code,
-                headers=dict(response.headers),
+                headers=_filter_headers(response.headers, _RESPONSE_HEADERS_TO_DROP),
             )
 
         except Exception as e:
@@ -268,7 +332,12 @@ class LLMProxy:
                 endpoint=endpoint,
                 error_type=type(e).__name__,
             )
-            raise HTTPException(status_code=500, detail=str(e))
+            # Exception text can echo upstream responses or request data, so it
+            # is logged but not returned to the client.
+            raise HTTPException(
+                status_code=500,
+                detail=f"Proxy request failed (request id {request_id})",
+            )
         finally:
             # Clear logging context
             logger.clear_context()
@@ -281,6 +350,9 @@ class LLMProxy:
         """
         Anonymize PII in request body.
 
+        All message fields share one mapping, so a placeholder means the same
+        value everywhere in the request and in the response.
+
         Args:
             body: Request body
             provider_config: Provider configuration
@@ -288,33 +360,44 @@ class LLMProxy:
         Returns:
             Tuple of (anonymized_body, pii_mapping)
         """
-        anonymized_body = body.copy()
-        combined_mapping = {}
+        anonymized_body = copy.deepcopy(body)
+        mapping: Dict[str, str] = {}
 
-        # Find and anonymize message fields
-        message_paths = provider_config["message_paths"]
-
-        for path in message_paths:
+        for path in provider_config["message_paths"]:
             if path in anonymized_body:
-                content = anonymized_body[path]
+                anonymized_body[path], mapping = self._anonymize_content(
+                    anonymized_body[path], mapping
+                )
 
-                # Handle different message formats
-                if isinstance(content, str):
-                    anonymized, mapping = self.guard.anonymize(content)
-                    anonymized_body[path] = anonymized
-                    combined_mapping.update(mapping)
+        return anonymized_body, mapping
 
-                elif isinstance(content, list):
-                    # Handle chat messages
-                    for i, message in enumerate(content):
-                        if isinstance(message, dict) and "content" in message:
-                            anonymized, mapping = self.guard.anonymize(
-                                message["content"]
-                            )
-                            anonymized_body[path][i]["content"] = anonymized
-                            combined_mapping.update(mapping)
+    def _anonymize_content(self, content, mapping: Dict[str, str]):
+        """
+        Anonymize a message field: a string, a list of messages, or a list of
+        content blocks such as ``{"type": "text", "text": ...}``.
+        """
+        if isinstance(content, str):
+            return self.guard.anonymize(content, existing_mapping=mapping)
 
-        return anonymized_body, combined_mapping
+        if isinstance(content, list):
+            anonymized = []
+            for item in content:
+                if isinstance(item, (str, list)):
+                    item, mapping = self._anonymize_content(item, mapping)
+                elif isinstance(item, dict):
+                    item = dict(item)
+                    if "content" in item:
+                        item["content"], mapping = self._anonymize_content(
+                            item["content"], mapping
+                        )
+                    if item.get("type") == "text" and isinstance(item.get("text"), str):
+                        item["text"], mapping = self.guard.anonymize(
+                            item["text"], existing_mapping=mapping
+                        )
+                anonymized.append(item)
+            return anonymized, mapping
+
+        return content, mapping
 
     def _deanonymize_response_body(
         self,
@@ -384,32 +467,33 @@ class LLMProxy:
             Streaming response
         """
         async def stream_generator():
-            async for chunk in response.aiter_bytes():
-                # Parse SSE chunk
-                if chunk.startswith(b"data: "):
-                    try:
-                        data = json.loads(chunk[6:])
-
-                        # De-anonymize content in chunk
-                        if "choices" in data:
-                            for choice in data["choices"]:
-                                if "delta" in choice and "content" in choice["delta"]:
-                                    content = choice["delta"]["content"]
-                                    choice["delta"]["content"] = self.guard.deanonymize(
-                                        content, mapping
-                                    )
-
-                        yield b"data: " + json.dumps(data).encode() + b"\n\n"
-                    except json.JSONDecodeError:
-                        yield chunk
-                else:
-                    yield chunk
+            # The upstream body arrives in arbitrary byte chunks that do not
+            # line up with server-sent events, so it is processed line by line.
+            async for line in response.aiter_lines():
+                yield (self._deanonymize_sse_line(line, mapping) + "\n").encode()
 
         return StreamingResponse(
             stream_generator(),
             media_type="text/event-stream",
-            headers=dict(response.headers),
+            headers=_filter_headers(response.headers, _RESPONSE_HEADERS_TO_DROP),
         )
+
+    def _deanonymize_sse_line(self, line: str, mapping: Dict[str, str]) -> str:
+        """Restore placeholders in the delta content of one SSE ``data:`` line."""
+        if not mapping or not line.startswith("data: "):
+            return line
+        try:
+            data = json.loads(line[6:])
+        except json.JSONDecodeError:
+            return line  # e.g. "data: [DONE]"
+        if not isinstance(data, dict):
+            return line
+
+        for choice in data.get("choices") or []:
+            delta = choice.get("delta") if isinstance(choice, dict) else None
+            if isinstance(delta, dict) and isinstance(delta.get("content"), str):
+                delta["content"] = self.guard.deanonymize(delta["content"], mapping)
+        return "data: " + json.dumps(data)
 
     def get_metrics(self) -> Dict:
         """Get proxy metrics."""
@@ -474,8 +558,10 @@ def get_proxy() -> LLMProxy:
 async def startup():
     """Initialize proxy on startup."""
     global proxy
-    config = ProxyConfig()  # Load from environment or config file
-    proxy = LLMProxy(config)
+    if proxy is None:
+        # Not started through __main__ (e.g. `uvicorn main:app`)
+        proxy = LLMProxy(ProxyConfig.from_env())
+    config = proxy.config
     logger.info(
         "Proxy initialized successfully",
         port=config.port,
@@ -531,31 +617,32 @@ async def anthropic_proxy(
 if __name__ == "__main__":
     import argparse
 
+    env_config = ProxyConfig.from_env()
+
     parser = argparse.ArgumentParser(description="LLM PII Protection Proxy")
-    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
+    parser.add_argument("--port", type=int, default=env_config.port, help="Port to listen on")
+    parser.add_argument("--host", type=str, default=env_config.host, help="Host to bind to")
     parser.add_argument(
         "--redis-url",
         type=str,
-        default="redis://localhost:6379",
+        default=env_config.redis_url,
         help="Redis URL for session storage",
     )
     parser.add_argument(
         "--policy",
         type=str,
-        default="default_pii",
+        default=env_config.policy,
         help="PII protection policy to use",
     )
 
     args = parser.parse_args()
 
-    # Update global config
-    config = ProxyConfig(
-        port=args.port,
-        host=args.host,
-        redis_url=args.redis_url,
-        policy=args.policy,
-    )
+    # Command-line arguments override the environment
+    config = env_config
+    config.port = args.port
+    config.host = args.host
+    config.redis_url = args.redis_url
+    config.policy = args.policy
 
     # Initialize proxy
     proxy = LLMProxy(config)

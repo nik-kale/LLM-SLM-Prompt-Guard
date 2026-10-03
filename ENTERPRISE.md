@@ -337,9 +337,9 @@ docker-compose up -d
 ```
 
 Access:
-- Proxy: http://localhost:8000
-- Grafana: http://localhost:3000
-- Prometheus: http://localhost:9090
+- Proxy: <http://localhost:8000>
+- Grafana: <http://localhost:3000>
+- Prometheus: <http://localhost:9090>
 
 ### Kubernetes (Production)
 
@@ -540,7 +540,6 @@ pytest packages/python/tests/performance/ --benchmark-only
 - **Documentation**: [docs/](docs/)
 - **Examples**: [examples/](examples/)
 - **Issues**: [GitHub Issues](https://github.com/nik-kale/llm-slm-prompt-guard/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/nik-kale/llm-slm-prompt-guard/discussions)
 
 ---
 

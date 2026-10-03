@@ -31,9 +31,9 @@ rules:
   # New line at end of file
   new-line-at-end-of-file: enable
 
-  # Document start markers (---)
-  document-start:
-    present: false
+  # Document start markers (---) are allowed but not required; Kubernetes
+  # manifests need them to separate documents in one file.
+  document-start: disable
 
   # Empty lines
   empty-lines:

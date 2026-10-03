@@ -122,6 +122,37 @@ class TestRegexSafety:
         # Should complete quickly
         assert duration < 1.0
 
+    @pytest.mark.parametrize(
+        "payload",
+        ["a" * 200_000, "a." * 100_000, "x-" * 100_000, "1" * 200_000],
+        ids=["letters", "dotted", "hyphenated", "digits"],
+    )
+    def test_detection_is_linear_on_long_runs(self, payload):
+        """Long runs without an "@" must not trigger quadratic backtracking."""
+        import time
+
+        from prompt_guard.detectors import EnhancedRegexDetector, RegexDetector
+
+        for detector in (RegexDetector(), EnhancedRegexDetector()):
+            start = time.perf_counter()
+            detector.detect(payload)
+            duration = time.perf_counter() - start
+            assert duration < 2.0, f"{type(detector).__name__} took {duration:.1f}s"
+
+    def test_enhanced_detector_scales_with_many_matches(self):
+        """Overlap bookkeeping must not be quadratic in the number of matches."""
+        import time
+
+        from prompt_guard.detectors import EnhancedRegexDetector
+
+        text = "mail user@example.com now. " * 20_000
+        start = time.perf_counter()
+        results = EnhancedRegexDetector().detect(text)
+        duration = time.perf_counter() - start
+
+        assert sum(r.entity_type == "EMAIL" for r in results) == 20_000
+        assert duration < 3.0
+
 
 class TestDataLeakage:
     """Test for potential data leakage."""
@@ -197,7 +228,7 @@ class TestCacheSecurity:
 
         # Normal usage
         text = "Email: john@example.com"
-        result1 = cached_guard.anonymize(text)
+        cached_guard.anonymize(text)
 
         # Try to poison cache by directly manipulating it
         # (This shouldn't affect the guard's behavior)
@@ -226,7 +257,7 @@ class TestStorageSecurity:
                 redis_url="redis://:wrongpassword@localhost:6379"
             )
             # Try to use it
-            session_id = storage.create_session()
+            storage.create_session()
             pytest.fail("Should have raised authentication error")
         except Exception as e:
             # Should fail with auth error, not crash
@@ -264,26 +295,6 @@ class TestStorageSecurity:
             pytest.skip(f"Redis not available: {e}")
 
 
-class TestProxySecurity:
-    """Test HTTP proxy security."""
-
-    def test_request_size_limit(self):
-        """Test that proxy limits request size (prevents DoS)."""
-        # This would be tested in the proxy itself
-        # Placeholder for proxy security tests
-        pass
-
-    def test_rate_limiting(self):
-        """Test rate limiting functionality."""
-        # Placeholder for rate limiting tests
-        pass
-
-    def test_no_sensitive_headers_leaked(self):
-        """Test that sensitive headers are not leaked."""
-        # Placeholder for header security tests
-        pass
-
-
 class TestComplianceSecurity:
     """Test compliance-related security."""
 
@@ -295,18 +306,31 @@ class TestComplianceSecurity:
         assert guard.policy["name"] == "hipaa_phi"
 
         # Verify audit requirements
-        assert guard.policy.get("audit", {}).get("required", False) == True
+        assert guard.policy.get("audit", {}).get("required", False) is True
 
     def test_pci_dss_cvv_never_stored(self):
         """Test that CVV is never stored (PCI-DSS requirement)."""
-        guard = PromptGuard(policy="pci_dss")
+        import re
 
-        text = "Card: 4532-1234-5678-9010, CVV: 123"
+        from prompt_guard.detectors import BaseDetector, RegexDetector
+        from prompt_guard.types import DetectorResult
+
+        class CvvDetector(BaseDetector):
+            def detect(self, text):
+                return [
+                    DetectorResult("CVV", m.start(1), m.end(1), m.group(1))
+                    for m in re.finditer(r"CVV: (\d{3,4})", text)
+                ]
+
+        guard = PromptGuard(detectors=[RegexDetector(), CvvDetector()], policy="pci_dss")
+
+        text = "Card: 4532-1234-5678-9010, CVV: 737"
         anonymized, mapping = guard.anonymize(text)
 
-        # CVV should not be in the mapping (should be redacted, not stored)
-        cvv_in_mapping = any("123" in str(v) for v in mapping.values())
-        assert not cvv_in_mapping  # CVV should NOT be in mapping
+        # The CVV is redacted but must not be stored in the mapping
+        assert anonymized == "Card: [PAN_1], CVV: [REDACTED]"
+        assert "737" not in mapping.values()
+        assert mapping == {"[PAN_1]": "4532-1234-5678-9010"}
 
 
 class TestSideChannelAttacks:
@@ -376,13 +400,11 @@ class TestErrorHandling:
         cache = InMemoryCache(max_size=10)
         cached_guard = CachedPromptGuard(guard, cache)
 
-        initial_size = len(cache)
-
         # Trigger errors
         for i in range(20):
             try:
                 cached_guard.anonymize("a" * (10 * 1024 * 1024))  # Large text
-            except:
+            except Exception:
                 pass
 
         # Force garbage collection

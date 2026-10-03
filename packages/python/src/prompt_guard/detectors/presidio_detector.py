@@ -22,7 +22,7 @@ try:
     PRESIDIO_AVAILABLE = True
 except ImportError:
     PRESIDIO_AVAILABLE = False
-    logger.warning(
+    logger.debug(
         "Presidio not available. Install with: pip install presidio-analyzer"
     )
 
@@ -162,7 +162,11 @@ class PresidioDetector(BaseDetector):
                 )
 
         except Exception as e:
-            logger.error(f"Presidio detection failed: {e}")
+            # Returning no results here would let the text through unredacted,
+            # so the error is raised. Only the type is logged: the message can
+            # quote the input.
+            logger.error("Presidio detection failed: %s", type(e).__name__)
+            raise
 
         return results
 

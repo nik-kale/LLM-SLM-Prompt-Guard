@@ -302,7 +302,7 @@ Use descriptive branch names:
 
 Follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
 
-```
+```text
 <type>(<scope>): <description>
 
 [optional body]
@@ -320,7 +320,7 @@ Types:
 - `chore`: Maintenance tasks
 
 Examples:
-```
+```text
 feat(python): add Presidio detector integration
 
 Integrates Microsoft Presidio for ML-based PII detection.
@@ -329,7 +329,7 @@ Adds optional dependency and fallback to regex detector.
 Closes #42
 ```
 
-```
+```text
 fix(node): correct email regex pattern
 
 The previous pattern failed to match emails with plus signs.
@@ -439,7 +439,7 @@ Updated regex to handle all valid email formats.
 
 ## Getting Help
 
-- **Questions**: Open a [Discussion](https://github.com/nik-kale/llm-slm-prompt-guard/discussions)
+- **Questions**: Open an [issue](https://github.com/nik-kale/llm-slm-prompt-guard/issues)
 - **Bugs**: Open an [Issue](https://github.com/nik-kale/llm-slm-prompt-guard/issues)
 - **Chat**: Join our community discussions
 

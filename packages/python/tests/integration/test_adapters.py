@@ -2,8 +2,10 @@
 Comprehensive integration tests for framework adapters.
 """
 
+import importlib.util
+
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock
 from prompt_guard import PromptGuard
 
 
@@ -11,7 +13,7 @@ class TestLangChainAdapter:
     """Integration tests for LangChain adapter."""
 
     @pytest.mark.skipif(
-        not pytest.importorskip("langchain", minversion=None),
+        importlib.util.find_spec("langchain") is None,
         reason="LangChain not installed",
     )
     def test_protected_llm_basic(self):
@@ -32,7 +34,7 @@ class TestLangChainAdapter:
         assert "john@example.com" not in base_llm.queries[0]  # PII should be masked
 
     @pytest.mark.skipif(
-        not pytest.importorskip("langchain", minversion=None),
+        importlib.util.find_spec("langchain") is None,
         reason="LangChain not installed",
     )
     def test_protected_chat_llm(self):
@@ -49,7 +51,7 @@ class TestLangChainAdapter:
         protected_chat = ProtectedChatLLM(chat=mock_chat, guard=guard)
 
         messages = [HumanMessage(content="Email: test@example.com")]
-        response = protected_chat(messages)
+        protected_chat(messages)
 
         # Verify PII was masked in the call to underlying chat
         call_args = mock_chat.call_args[0][0]
@@ -128,8 +130,8 @@ class TestCaching:
 
         text = "Email: john@example.com"
 
-        result1 = cached_guard1.anonymize(text)
-        result2 = cached_guard2.anonymize(text)
+        cached_guard1.anonymize(text)
+        cached_guard2.anonymize(text)
 
         # Different policies should create different cache entries
         assert len(cache) == 2
@@ -222,8 +224,8 @@ class TestEnhancedDetector:
         results = detector.detect(btc_text)
         assert any(r.entity_type == "CRYPTO_ADDRESS" for r in results)
 
-        # Ethereum address
-        eth_text = "Send to: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+        # Ethereum address (40 hex digits; the previous sample had 39)
+        eth_text = "Send to: 0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
         results = detector.detect(eth_text)
         assert any(r.entity_type == "CRYPTO_ADDRESS" for r in results)
 
@@ -247,7 +249,8 @@ class TestPolicies:
 
     def test_hipaa_policy(self):
         """Test HIPAA/PHI policy."""
-        guard = PromptGuard(policy="hipaa_phi")
+        # MRNs are only recognised by the enhanced regex detector
+        guard = PromptGuard(detectors=["regex", "enhanced_regex"], policy="hipaa_phi")
 
         patient_data = """
         Patient: John Smith
@@ -320,19 +323,19 @@ class TestEndToEnd:
         guard = PromptGuard(policy="default_pii")
 
         # Turn 1
-        turn1 = "My email is john@example.com"
-        anon1, map1 = guard.anonymize(turn1)
+        anon1, mapping = guard.anonymize("My email is john@example.com")
 
         # Turn 2 - reference to same email
-        turn2 = "Please send the confirmation to that email"
-        anon2, map2 = guard.anonymize(turn2)
+        anon2, mapping = guard.anonymize(
+            "Please send the confirmation to that email", existing_mapping=mapping
+        )
 
-        # Turn 3 - new PII
-        turn3 = "Also CC sarah@example.com"
-        anon3, map3 = guard.anonymize(turn3)
+        # Turn 3 - new PII continues the numbering instead of reusing [EMAIL_1]
+        anon3, mapping = guard.anonymize("Also CC sarah@example.com", existing_mapping=mapping)
 
-        # Combine mappings for de-anonymization
-        combined_mapping = {**map1, **map2, **map3}
-
-        # Should be able to de-anonymize all turns
-        assert len(combined_mapping) >= 2  # At least 2 emails
+        assert anon1 == "My email is [EMAIL_1]"
+        assert anon3 == "Also CC [EMAIL_2]"
+        assert len(mapping) == 2
+        assert guard.deanonymize(f"{anon1}. {anon3}", mapping) == (
+            "My email is john@example.com. Also CC sarah@example.com"
+        )

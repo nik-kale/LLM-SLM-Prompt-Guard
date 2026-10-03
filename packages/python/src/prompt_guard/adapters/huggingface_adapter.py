@@ -20,7 +20,7 @@ Example:
     >>> # PII is automatically protected!
 """
 
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Dict, List, Optional, Union
 import logging
 
 logger = logging.getLogger(__name__)
@@ -197,7 +197,7 @@ class ProtectedConversational:
         self.pipeline = pipeline
         self.guard = guard
         self.deanonymize_output = deanonymize_output
-        self._conversation_mappings: Dict[str, Dict[str, str]] = {}
+        self._conversation_mappings: Dict[int, Dict[str, str]] = {}  # keyed by id()
 
     def __call__(self, conversations: Any, **kwargs) -> Any:
         """
@@ -227,10 +227,11 @@ class ProtectedConversational:
             # Anonymize new messages
             new_messages = []
             for message in conv.iter_texts():
-                anonymized, mapping = self.guard.anonymize(message)
+                # Continue the conversation's mapping so placeholders stay unique
+                anonymized, self._conversation_mappings[conv_id] = self.guard.anonymize(
+                    message, existing_mapping=self._conversation_mappings[conv_id]
+                )
                 new_messages.append(anonymized)
-                # Accumulate mappings across conversation
-                self._conversation_mappings[conv_id].update(mapping)
 
             # Create anonymized conversation
             anonymized_conv = Conversation()
@@ -343,7 +344,7 @@ class ProtectedTextGeneration:
         outputs = self.model.generate(**inputs, **kwargs)
 
         # Decode
-        generated_texts = self.tokenizer.batch_decode(
+        generated_texts: List[str] = self.tokenizer.batch_decode(
             outputs, skip_special_tokens=True
         )
 

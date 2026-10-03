@@ -62,26 +62,28 @@ class VercelAIAdapter:
             Tuple of (anonymized_messages, mapping)
         """
         anonymized_messages = []
-        combined_mapping = {}
+        # One mapping for all messages keeps placeholders unique across them
+        mapping: Dict[str, str] = {}
 
         for message in messages:
             if "content" in message and isinstance(message["content"], str):
                 if self._is_async:
-                    result = await self.guard.anonymize_async(message["content"])
-                    anonymized_content = result.anonymized
-                    mapping = result.mapping
+                    anonymized_content, mapping = await self.guard.anonymize_async(
+                        message["content"], existing_mapping=mapping
+                    )
                 else:
-                    anonymized_content, mapping = self.guard.anonymize(message["content"])
+                    anonymized_content, mapping = self.guard.anonymize(
+                        message["content"], existing_mapping=mapping
+                    )
 
                 anonymized_messages.append({
                     **message,
                     "content": anonymized_content,
                 })
-                combined_mapping.update(mapping)
             else:
                 anonymized_messages.append(message)
 
-        return anonymized_messages, combined_mapping
+        return anonymized_messages, mapping
 
     async def protect_streaming_response(
         self, stream: AsyncIterator[str], mapping: Dict[str, str]
@@ -118,9 +120,7 @@ class VercelAIAdapter:
         args_str = json.dumps(arguments, ensure_ascii=False)
 
         if self._is_async:
-            result = await self.guard.anonymize_async(args_str)
-            anonymized_str = result.anonymized
-            mapping = result.mapping
+            anonymized_str, mapping = await self.guard.anonymize_async(args_str)
         else:
             anonymized_str, mapping = self.guard.anonymize(args_str)
 
@@ -257,7 +257,7 @@ class ProtectedStreamingChat:
         anonymized_messages, mapping = await self.adapter.protect_messages(messages)
 
         # Call LLM (simplified - actual implementation would use Vercel AI SDK)
-        response = {
+        response: Dict[str, Any] = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "model": self.model,

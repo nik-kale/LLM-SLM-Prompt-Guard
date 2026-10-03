@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Overlapping detections no longer leak PII. Detections are filtered by the
+  policy before overlaps are resolved, and each group of overlapping
+  detections becomes one entity covering all of them. Previously an SSN or
+  card number that the phone pattern also matched could be left unredacted
+  under a policy without `PHONE`, and the `merge` strategy could re-emit part
+  of an entity. Ties now go to the more sensitive type (`SSN: [SSN_1]`).
+- `AsyncPromptGuard` uses the same anonymization logic as `PromptGuard`; it
+  skipped overlap resolution and could leak part of an entity.
+- `HashAnonymizer` computes HMAC-SHA256/512 under a secret key (the `salt`
+  argument, or a random per-instance key) instead of an unsalted hash that
+  can be reversed by hashing every candidate value. `md5` is no longer
+  accepted. Hash values differ from earlier builds.
+- `SyntheticAnonymizer` derives fake values from a keyed HMAC instead of
+  `md5(original)`, so synthetic values cannot be traced back by generating
+  fakes for candidate values. It no longer reseeds Faker globally and never
+  gives two originals the same synthetic value.
+- Proxy rate limits always apply per client IP. `X-User-ID` adds a per-user
+  limit instead of replacing the IP limit, which let clients bypass limiting
+  by sending a new value per request. Counting is atomic and every counter
+  key expires.
+- Presidio and spaCy detector errors are raised instead of being treated as
+  "no PII found", and only the exception type is logged.
+- The CLI creates mapping files, JSON output that contains a mapping, and
+  de-anonymized output with mode `0600`.
+- Entities whose policy entry sets `storage_allowed: false` (CVV, PIN and
+  magnetic stripe data in `pci_dss`) are redacted without being stored in the
+  mapping.
+- The email patterns no longer backtrack quadratically; 1 MB of text without
+  an `@` took minutes to scan.
+- `JSONFormatter` logs the exception type and stack frames but not the
+  exception message, which often quotes the input; pass
+  `include_exception_messages=True` to restore it. The telemetry decorators
+  likewise export only the exception type on failed spans.
+
+### Fixed
+
+- `import prompt_guard` failed with a `SyntaxError`, and with a `NameError`
+  when LangChain or LlamaIndex was not installed.
+- Built wheels did not contain the policy YAML files, so `PromptGuard()`
+  failed after `pip install`.
+- Placeholders are unique within a mapping: repeated values reuse their
+  placeholder, entity types that share a template (`DOB` and `DATE_TIME` in
+  `hipaa_phi`) no longer collide, and `deanonymize()` replaces in one pass.
+- The proxy and the LangChain, LlamaIndex, Hugging Face and Vercel adapters
+  anonymize all messages of a request or conversation into one mapping, so
+  `[EMAIL_1]` no longer stands for different people. `stream_anonymize()`
+  no longer splits entities across chunks.
+- The proxy reads its settings from environment variables (as the Dockerfile
+  and docker-compose.yml expect), drops stale `Content-Length` and
+  `Content-Encoding` headers, restores placeholders in streamed responses,
+  anonymizes Anthropic system prompts and content blocks, and no longer
+  returns exception text to clients.
+- Detection reports count overlapping detections once (coverage could exceed
+  100%) and rate driver's licence, MRN, EIN, UK NI and NHS numbers as high
+  risk.
+- Importing the package no longer installs logging handlers or prints
+  warnings for missing optional extras, and `get_logger()` no longer writes
+  every record twice.
+- `EnhancedRegexDetector` no longer returns overlapping results and no longer
+  slows down quadratically with the number of matches.
+- `prompt-guard list-policies` and `list-detectors` work with every supported
+  click version.
+- The `from prompt_guard.adapters import ...` and
+  `from prompt_guard.storage import ...` imports shown in the docs work.
+
+### Added
+
+- `existing_mapping` keyword argument for `PromptGuard.anonymize()` and
+  `AsyncPromptGuard.anonymize_async()` to continue a mapping across texts.
+- `PromptGuard` accepts the `"enhanced_regex"` and `"spacy"` detector names
+  and detector instances, as the README documents.
+- Tests for the HTTP proxy (`packages/proxy/tests`).
+
+### Changed
+
+- The CI, Lint, Documentation, Security and Release workflows were repaired;
+  the separate Tests workflow was merged into CI.
+
 ## [1.2.0] - 2025-11-17
 
 ### 🚀 Production-Ready Release - CI/CD, Helm, and Pulumi

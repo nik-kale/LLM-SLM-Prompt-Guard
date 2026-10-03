@@ -268,5 +268,5 @@ MIT License - see LICENSE for details.
 
 ## Support
 
-- GitHub Issues: https://github.com/nik-kale/llm-slm-prompt-guard/issues
-- Documentation: https://docs.prompt-guard.com
+- GitHub Issues: <https://github.com/nik-kale/llm-slm-prompt-guard/issues>
+- Documentation: <https://docs.prompt-guard.com>

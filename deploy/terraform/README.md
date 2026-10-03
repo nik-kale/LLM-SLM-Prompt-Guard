@@ -288,9 +288,9 @@ Common issues:
 
 For issues or questions:
 
-- **GitHub Issues**: https://github.com/nik-kale/llm-slm-prompt-guard/issues
-- **Documentation**: https://docs.prompt-guard.com
-- **Email**: support@example.com
+- **GitHub Issues**: <https://github.com/nik-kale/llm-slm-prompt-guard/issues>
+- **Documentation**: <https://docs.prompt-guard.com>
+- **Email**: <support@example.com>
 
 ## License
 

@@ -9,6 +9,9 @@ on:
     # Run security scans daily at 2 AM UTC
     - cron: '0 2 * * *'
 
+permissions:
+  contents: read
+
 jobs:
   security-python:
     name: Python Security
@@ -22,33 +25,29 @@ jobs:
         with:
           python-version: "3.11"
 
+      # pip-audit audits the active environment, so the package and its
+      # proxy dependencies are installed into it first.
       - name: Install dependencies
         run: |
-          pip install bandit safety pip-audit
+          pip install bandit pip-audit
+          pip install -e "packages/python[proxy]"
 
       - name: Run bandit security scanner
         run: |
-          cd packages/python
-          bandit -r src/ -f json -o bandit-report.json || true
-
-      - name: Run safety check
-        run: |
-          cd packages/python
-          safety check --json --output safety-report.json || true
+          bandit -c .bandit.yml -r packages/python/src packages/proxy/src \
+            -f json -o bandit-report.json || true
 
       - name: Run pip-audit
         run: |
-          cd packages/python
-          pip-audit --format json --output pip-audit-report.json || true
+          pip-audit --skip-editable --format json --output pip-audit-report.json || true
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: python-security-reports
           path: |
-            packages/python/bandit-report.json
-            packages/python/safety-report.json
-            packages/python/pip-audit-report.json
+            bandit-report.json
+            pip-audit-report.json
 
   security-codeql:
     name: CodeQL Analysis
@@ -82,27 +81,35 @@ jobs:
   security-snyk:
     name: Snyk Security Scan
     runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Skip without SNYK_TOKEN
+        if: env.SNYK_TOKEN == ''
+        run: echo "::notice::SNYK_TOKEN is not configured; skipping the Snyk scan"
+
       - name: Run Snyk to check for vulnerabilities
+        if: env.SNYK_TOKEN != ''
         uses: snyk/actions/python-3.10@master
         continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --file=packages/python/pyproject.toml --severity-threshold=high
 
   security-trivy:
     name: Trivy Container Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t prompt-guard-proxy:test .
+        run: docker build --target proxy -t prompt-guard-proxy:test .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -139,10 +146,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Rules and the allowlist for sample credentials are in .gitleaks.toml
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
 
   security-summary:
     name: Security Summary

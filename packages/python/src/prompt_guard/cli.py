@@ -2,14 +2,29 @@
 CLI interface for Prompt Guard - Quick PII detection and anonymization.
 """
 
+import os
 import sys
 import json
 import pathlib
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import click
 from . import PromptGuard, get_version, list_policies, list_detectors
-from .types import DetectorResult
 from .report import format_report_text
+
+
+def _write_private(path: str, content: str) -> None:
+    """
+    Write a file that contains original PII (mappings, restored text) so that
+    only the current user can read it.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        # O_CREAT's mode does not apply to a file that already exists.
+        os.fchmod(fd, 0o600)
+    except (AttributeError, OSError):  # pragma: no cover - not on Windows
+        pass
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
 @click.group()
@@ -102,7 +117,7 @@ def detect(
     ]
 
     if json_output:
-        output = {
+        output: Dict[str, Any] = {
             "total_entities": len(filtered_results),
             "entities": [
                 {
@@ -124,13 +139,13 @@ def detect(
         click.echo(json.dumps(output, indent=2))
     else:
         click.echo(f"\n{'=' * 60}")
-        click.echo(f"PII Detection Results")
+        click.echo("PII Detection Results")
         click.echo(f"{'=' * 60}\n")
         click.echo(f"Total entities found: {len(filtered_results)}\n")
 
         if filtered_results:
             # Group by type
-            by_type = {}
+            by_type: Dict[str, List[Any]] = {}
             for r in filtered_results:
                 if r.entity_type not in by_type:
                     by_type[r.entity_type] = []
@@ -223,16 +238,19 @@ def anonymize(
 
     # Write or print output
     if output:
-        with open(output, "w", encoding="utf-8") as f:
-            f.write(output_str)
+        if json_output:
+            # The JSON output includes the mapping
+            _write_private(output, output_str)
+        else:
+            with open(output, "w", encoding="utf-8") as f:
+                f.write(output_str)
         click.echo(f"Anonymized text written to: {output}")
     else:
         click.echo(output_str)
 
     # Write mapping if requested
     if mapping_output:
-        with open(mapping_output, "w", encoding="utf-8") as f:
-            json.dump(mapping, f, indent=2)
+        _write_private(mapping_output, json.dumps(mapping, indent=2))
         click.echo(f"Mapping written to: {mapping_output}")
 
 
@@ -281,8 +299,7 @@ def deanonymize(
 
     # Write or print output
     if output:
-        with open(output, "w", encoding="utf-8") as f:
-            f.write(original_text)
+        _write_private(output, original_text)
         click.echo(f"De-anonymized text written to: {output}")
     else:
         click.echo(original_text)
@@ -328,7 +345,7 @@ def scan(
     else:
         files = dir_path.glob(pattern)
 
-    results = {}
+    results: Dict[str, Dict[str, Any]] = {}
     total_files = 0
     total_entities = 0
 
@@ -377,26 +394,26 @@ def scan(
         click.echo(json.dumps(output, indent=2))
     else:
         click.echo(f"\n{'=' * 60}")
-        click.echo(f"PII Scan Results")
+        click.echo("PII Scan Results")
         click.echo(f"{'=' * 60}\n")
         click.echo(f"Files scanned: {total_files}")
         click.echo(f"Files with PII: {len(results)}")
         click.echo(f"Total entities found: {total_entities}\n")
 
         if results:
-            for file_path, file_results in results.items():
+            for file_name, file_results in results.items():
                 if "error" in file_results:
-                    click.echo(f"❌ {file_path}: Error - {file_results['error']}")
+                    click.echo(f"❌ {file_name}: Error - {file_results['error']}")
                 else:
                     click.echo(
-                        f"⚠️  {file_path}: {file_results['entity_count']} entities"
+                        f"⚠️  {file_name}: {file_results['entity_count']} entities"
                     )
                     # Group by type
-                    by_type = {}
+                    counts: Dict[str, int] = {}
                     for entity in file_results["entities"]:
                         entity_type = entity["type"]
-                        by_type[entity_type] = by_type.get(entity_type, 0) + 1
-                    for entity_type, count in sorted(by_type.items()):
+                        counts[entity_type] = counts.get(entity_type, 0) + 1
+                    for entity_type, count in sorted(counts.items()):
                         click.echo(f"    - {entity_type}: {count}")
                     click.echo()
 
@@ -423,7 +440,7 @@ def validate_policy(policy_file: str):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(name="list-policies")
 def list_policies_cmd():
     """List all available built-in policies."""
     policies = list_policies()
@@ -433,11 +450,11 @@ def list_policies_cmd():
     click.echo()
 
 
-@cli.command()
+@cli.command(name="list-detectors")
 def list_detectors_cmd():
     """List all available detectors and their status."""
     detectors = list_detectors()
-    click.echo(f"\nAvailable detectors:\n")
+    click.echo("\nAvailable detectors:\n")
     for name, available in sorted(detectors.items()):
         status = "✅ Available" if available else "❌ Not installed"
         click.echo(f"  {name}: {status}")

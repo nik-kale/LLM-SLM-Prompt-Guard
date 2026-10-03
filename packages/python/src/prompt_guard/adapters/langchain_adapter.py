@@ -5,7 +5,9 @@ Provides seamless integration with LangChain LLMs and chains,
 automatically anonymizing prompts and de-anonymizing responses.
 """
 
-from typing import Any, List, Optional, Dict, Mapping as TypeMapping
+from __future__ import annotations
+
+from typing import Any, List, Optional, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,7 +18,7 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-    logger.warning("LangChain not available. Install with: pip install langchain")
+    logger.debug("LangChain not available. Install with: pip install langchain")
 
 
 if LANGCHAIN_AVAILABLE:
@@ -75,7 +77,7 @@ if LANGCHAIN_AVAILABLE:
                 self._mappings[prompt] = mapping
 
             # Call the underlying LLM
-            response = self.llm(
+            response: str = self.llm(
                 anonymized_prompt,
                 stop=stop,
                 callbacks=run_manager.get_child() if run_manager else None,
@@ -154,14 +156,16 @@ if LANGCHAIN_AVAILABLE:
             """
             from langchain.schema import HumanMessage, AIMessage, SystemMessage
 
-            # Anonymize messages
+            # Anonymize messages with one shared mapping so placeholders are
+            # unique across the whole conversation
             anonymized_messages = []
-            mappings = []
+            mapping: Dict[str, str] = {}
 
             for message in messages:
                 content = message.content
-                anonymized_content, mapping = self.guard.anonymize(content)
-                mappings.append(mapping)
+                anonymized_content, mapping = self.guard.anonymize(
+                    content, existing_mapping=mapping
+                )
 
                 # Preserve message type
                 if isinstance(message, HumanMessage):
@@ -183,15 +187,10 @@ if LANGCHAIN_AVAILABLE:
             response = self.chat(anonymized_messages, **kwargs)
 
             # De-anonymize response if enabled
-            if self.deanonymize_response and mappings:
-                # Combine all mappings
-                combined_mapping = {}
-                for mapping in mappings:
-                    combined_mapping.update(mapping)
-
+            if self.deanonymize_response and mapping:
                 if hasattr(response, 'content'):
                     response.content = self.guard.deanonymize(
-                        response.content, combined_mapping
+                        response.content, mapping
                     )
 
             return response

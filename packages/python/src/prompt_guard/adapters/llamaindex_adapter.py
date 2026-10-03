@@ -5,27 +5,27 @@ Provides seamless integration with LlamaIndex query engines and chat engines,
 automatically anonymizing queries and de-anonymizing responses.
 """
 
-from typing import Any, List, Optional, Dict
+from __future__ import annotations
+
+from typing import Any, Optional, Dict
 import logging
 
 logger = logging.getLogger(__name__)
 
 try:
-    from llama_index.core.base.base_query_engine import BaseQueryEngine
+    from llama_index.core.base.base_query_engine import BaseQueryEngine  # noqa: F401
     from llama_index.core.base.response.schema import Response, StreamingResponse
-    from llama_index.core.chat_engine.types import BaseChatEngine
-    from llama_index.core.schema import QueryBundle
 
     LLAMAINDEX_AVAILABLE = True
 except ImportError:
     try:
         # Try older import path
-        from llama_index import BaseQueryEngine, Response, StreamingResponse
+        from llama_index import BaseQueryEngine, Response, StreamingResponse  # noqa: F401
 
         LLAMAINDEX_AVAILABLE = True
     except ImportError:
         LLAMAINDEX_AVAILABLE = False
-        logger.warning("LlamaIndex not available. Install with: pip install llama-index")
+        logger.debug("LlamaIndex not available. Install with: pip install llama-index")
 
 
 if LLAMAINDEX_AVAILABLE:
@@ -198,10 +198,11 @@ if LLAMAINDEX_AVAILABLE:
                 Chat response
             """
             # Anonymize the message
-            anonymized_message, mapping = self.guard.anonymize(message)
-
-            # Update conversation mapping (accumulate across turns)
-            self._conversation_mapping.update(mapping)
+            # Continue the conversation mapping so placeholders from earlier
+            # turns keep their meaning and new values get new placeholders
+            anonymized_message, self._conversation_mapping = self.guard.anonymize(
+                message, existing_mapping=self._conversation_mapping
+            )
 
             # Chat with the underlying engine
             response = self.chat_engine.chat(anonymized_message)
@@ -226,10 +227,9 @@ if LLAMAINDEX_AVAILABLE:
                 Chat response
             """
             # Anonymize the message
-            anonymized_message, mapping = self.guard.anonymize(message)
-
-            # Update conversation mapping
-            self._conversation_mapping.update(mapping)
+            anonymized_message, self._conversation_mapping = self.guard.anonymize(
+                message, existing_mapping=self._conversation_mapping
+            )
 
             # Chat with the underlying engine asynchronously
             if hasattr(self.chat_engine, "achat"):
@@ -264,10 +264,9 @@ if LLAMAINDEX_AVAILABLE:
                 Streaming response
             """
             # Anonymize the message
-            anonymized_message, mapping = self.guard.anonymize(message)
-
-            # Update conversation mapping
-            self._conversation_mapping.update(mapping)
+            anonymized_message, self._conversation_mapping = self.guard.anonymize(
+                message, existing_mapping=self._conversation_mapping
+            )
 
             # Stream chat with the underlying engine
             if hasattr(self.chat_engine, "stream_chat"):

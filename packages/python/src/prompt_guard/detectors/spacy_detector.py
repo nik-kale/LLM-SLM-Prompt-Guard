@@ -20,7 +20,7 @@ try:
     SPACY_AVAILABLE = True
 except ImportError:
     SPACY_AVAILABLE = False
-    logger.warning("spaCy not available. Install with: pip install spacy")
+    logger.debug("spaCy not available. Install with: pip install spacy")
 
 
 class SpacyDetector(BaseDetector):
@@ -119,7 +119,7 @@ class SpacyDetector(BaseDetector):
                 if pipe in self.nlp.pipe_names and pipe != "ner":
                     try:
                         self.nlp.disable_pipe(pipe)
-                    except:
+                    except Exception:
                         pass
 
     def detect(self, text: str) -> List[DetectorResult]:
@@ -170,7 +170,11 @@ class SpacyDetector(BaseDetector):
                 )
 
         except Exception as e:
-            logger.error(f"spaCy detection failed: {e}")
+            # Returning no results here would let the text through unredacted,
+            # so the error is raised. Only the type is logged: the message can
+            # quote the input.
+            logger.error("spaCy detection failed: %s", type(e).__name__)
+            raise
 
         return results
 

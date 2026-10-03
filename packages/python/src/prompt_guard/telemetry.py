@@ -2,7 +2,7 @@
 OpenTelemetry integration for distributed tracing and metrics.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Optional
 from functools import wraps
 import time
 
@@ -19,8 +19,8 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
     # Provide no-op implementations
-    trace = None
-    metrics = None
+    trace = None  # type: ignore[assignment]
+    metrics = None  # type: ignore[assignment]
 
 
 class TelemetryConfig:
@@ -145,7 +145,9 @@ class Telemetry:
         
         @wraps(func)
         def wrapper(*args, **kwargs):
-            with self.tracer.start_as_current_span("anonymize") as span:
+            with self.tracer.start_as_current_span(
+                "anonymize", record_exception=False, set_status_on_exception=False
+            ) as span:
                 start_time = time.time()
                 
                 try:
@@ -179,8 +181,10 @@ class Telemetry:
                     return result
                     
                 except Exception as e:
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    span.record_exception(e)
+                    # The exception message can quote the PII being processed,
+                    # so only its type is exported.
+                    span.set_status(Status(StatusCode.ERROR, type(e).__name__))
+                    span.set_attribute("exception.type", type(e).__qualname__)
                     raise
                     
                 finally:
@@ -203,7 +207,9 @@ class Telemetry:
         
         @wraps(func)
         def wrapper(*args, **kwargs):
-            with self.tracer.start_as_current_span("deanonymize") as span:
+            with self.tracer.start_as_current_span(
+                "deanonymize", record_exception=False, set_status_on_exception=False
+            ) as span:
                 start_time = time.time()
                 
                 try:
@@ -217,8 +223,10 @@ class Telemetry:
                     return result
                     
                 except Exception as e:
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    span.record_exception(e)
+                    # The exception message can quote the PII being processed,
+                    # so only its type is exported.
+                    span.set_status(Status(StatusCode.ERROR, type(e).__name__))
+                    span.set_attribute("exception.type", type(e).__qualname__)
                     raise
                     
                 finally:
@@ -245,7 +253,11 @@ class Telemetry:
         def decorator(func):
             @wraps(func)
             def wrapper(*args, **kwargs):
-                with self.tracer.start_as_current_span(f"detect.{detector_name}") as span:
+                with self.tracer.start_as_current_span(
+                    f"detect.{detector_name}",
+                    record_exception=False,
+                    set_status_on_exception=False,
+                ) as span:
                     start_time = time.time()
                     
                     try:
@@ -259,8 +271,10 @@ class Telemetry:
                         return results
                         
                     except Exception as e:
-                        span.set_status(Status(StatusCode.ERROR, str(e)))
-                        span.record_exception(e)
+                        # The exception message can quote the PII being processed,
+                        # so only its type is exported.
+                        span.set_status(Status(StatusCode.ERROR, type(e).__name__))
+                        span.set_attribute("exception.type", type(e).__qualname__)
                         raise
                         
                     finally:
