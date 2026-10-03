@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import List, Dict, Tuple, Any, Optional, Callable
-import yaml
 import pathlib
+import re
+
+import yaml
 
 from .detectors.regex_detector import RegexDetector
 from .types import (
@@ -240,19 +242,31 @@ class PromptGuard:
         text: str,
         options: Optional[AnonymizeOptions] = None,
         min_confidence: Optional[float] = None,
+        *,
+        existing_mapping: Optional[Mapping] = None,
     ) -> AnonymizeResult:
         """
         Anonymize PII in the given text.
+
+        Repeated values share one placeholder, and placeholders are unique
+        within the returned mapping even when several entity types use the
+        same placeholder template.
 
         Args:
             text: The text to anonymize
             options: Anonymization options (takes precedence over min_confidence)
             min_confidence: Minimum confidence threshold for ML detectors (0.0-1.0)
                           Shorthand for options.min_confidence
+            existing_mapping: A mapping returned by an earlier call. Values it
+                already contains keep their placeholders, and new placeholders
+                are numbered so they never collide with it. Use this when
+                several texts (chat messages, conversation turns, stream
+                chunks) are de-anonymized with one mapping. It is not modified.
 
         Returns:
             A tuple of (anonymized_text, mapping) where mapping is a dict
-            of placeholder -> original value
+            of placeholder -> original value. When ``existing_mapping`` is
+            given, the returned mapping also contains its entries.
         """
         # Handle options
         if options is None:
@@ -260,10 +274,25 @@ class PromptGuard:
             if min_confidence is not None:
                 options.min_confidence = min_confidence
 
+        return self._anonymize_with_results(
+            text, self._detect(text), options, existing_mapping
+        )
+
+    def _detect(self, text: str) -> List[DetectorResult]:
+        """Run every configured detector over the text."""
         all_results: List[DetectorResult] = []
         for detector in self.detectors:
             all_results.extend(detector.detect(text))
+        return all_results
 
+    def _anonymize_with_results(
+        self,
+        text: str,
+        all_results: List[DetectorResult],
+        options: AnonymizeOptions,
+        existing_mapping: Optional[Mapping] = None,
+    ) -> AnonymizeResult:
+        """Replace detected entities in ``text`` with placeholders."""
         # Filter by confidence if needed
         if options.min_confidence > 0:
             all_results = [
@@ -282,36 +311,56 @@ class PromptGuard:
         # Resolve overlapping entities (result is sorted by start index)
         all_results = self._resolve_overlaps(all_results, text)
 
-        mapping: Mapping = {}
+        mapping: Mapping = dict(existing_mapping) if existing_mapping else {}
+        placeholder_for: Dict[str, str] = {}
+        for placeholder, original in mapping.items():
+            placeholder_for.setdefault(original, placeholder)
+
         anonymized = []
         last_idx = 0
 
-        # Counter per entity type
+        # Next number per placeholder template
         counters: Dict[str, int] = {}
 
         for res in all_results:
             entity_cfg = policy_entities[res.entity_type]
+            original = text[res.start : res.end]
+            # Policies can mark values that must never be stored (e.g. CVV
+            # under pci_dss). Those are redacted but kept out of the mapping.
+            storable = entity_cfg.get("storage_allowed", True) is not False
 
             # Add text before this entity
             anonymized.append(text[last_idx : res.start])
 
-            # Compute placeholder
-            counters[res.entity_type] = counters.get(res.entity_type, 0) + 1
-            i = counters[res.entity_type]
-            placeholder_tpl = entity_cfg.get(
-                "placeholder", f"[{res.entity_type}_{{i}}]"
-            )
-            placeholder = placeholder_tpl.format(i=i)
+            placeholder = placeholder_for.get(original) if storable else None
+            if placeholder is None:
+                template = entity_cfg.get("placeholder", f"[{res.entity_type}_{{i}}]")
+                placeholder = self._next_placeholder(template, counters, mapping)
+                if storable:
+                    mapping[placeholder] = original
+                    placeholder_for[original] = placeholder
 
             anonymized.append(placeholder)
-            mapping[placeholder] = text[res.start : res.end]
-
             last_idx = res.end
 
         # Add trailing text
         anonymized.append(text[last_idx:])
 
         return "".join(anonymized), mapping
+
+    @staticmethod
+    def _next_placeholder(template: str, counters: Dict[str, int], mapping: Mapping) -> str:
+        """Return the next placeholder for ``template`` that is not already in use."""
+        if template.format(i=1) == template.format(i=2):
+            # Template without a counter: every entity shares one placeholder.
+            return template.format(i=1)
+        i = counters.get(template, 0)
+        while True:
+            i += 1
+            placeholder = template.format(i=i)
+            if placeholder not in mapping:
+                counters[template] = i
+                return placeholder
 
     def detect_only(
         self,
@@ -336,9 +385,7 @@ class PromptGuard:
         Returns:
             DetectionReport with statistics and risk assessment
         """
-        all_results: List[DetectorResult] = []
-        for detector in self.detectors:
-            all_results.extend(detector.detect(text))
+        all_results = self._detect(text)
         
         # Filter by confidence if specified
         if min_confidence is not None and min_confidence > 0:
@@ -360,10 +407,14 @@ class PromptGuard:
         Returns:
             Text with placeholders replaced by original values
         """
-        result = text
-        for placeholder, original in mapping.items():
-            result = result.replace(placeholder, original)
-        return result
+        placeholders = sorted((p for p in mapping if p), key=len, reverse=True)
+        if not placeholders:
+            return text
+        # One pass, longest placeholder first: with a template such as
+        # "NAME_{i}", "NAME_1" must not match the start of "NAME_10", and
+        # restored values must not be scanned for placeholders again.
+        pattern = re.compile("|".join(re.escape(p) for p in placeholders))
+        return pattern.sub(lambda m: mapping[m.group(0)], text)
 
     def batch_anonymize(
         self,
