@@ -142,53 +142,53 @@ class SyntheticAnonymizer(BaseAnonymizer):
         
         # Generate based on entity type
         if entity_type in ("PERSON", "NAME"):
-            return self.fake.name()
+            return str(self.fake.name())
         
         elif entity_type == "EMAIL":
-            return self.fake.email()
+            return str(self.fake.email())
         
         elif entity_type in ("PHONE", "PHONE_NUMBER"):
             # Try to preserve format
             if "-" in original_value:
-                return self.fake.phone_number()
+                return str(self.fake.phone_number())
             else:
-                return self.fake.phone_number().replace("-", "")
+                return str(self.fake.phone_number().replace("-", ""))
         
         elif entity_type == "SSN":
-            return self.fake.ssn()
+            return str(self.fake.ssn())
         
         elif entity_type == "CREDIT_CARD":
-            return self.fake.credit_card_number()
+            return str(self.fake.credit_card_number())
         
         elif entity_type in ("ADDRESS", "LOCATION"):
-            return self.fake.address().replace("\n", ", ")
+            return str(self.fake.address().replace("\n", ", "))
         
         elif entity_type == "CITY":
-            return self.fake.city()
+            return str(self.fake.city())
         
         elif entity_type == "STATE":
-            return self.fake.state()
+            return str(self.fake.state())
         
         elif entity_type == "COUNTRY":
-            return self.fake.country()
+            return str(self.fake.country())
         
         elif entity_type == "ZIP_CODE":
-            return self.fake.zipcode()
+            return str(self.fake.zipcode())
         
         elif entity_type == "COMPANY":
-            return self.fake.company()
+            return str(self.fake.company())
         
         elif entity_type == "IP_ADDRESS":
             if ":" in original_value:  # IPv6
-                return self.fake.ipv6()
+                return str(self.fake.ipv6())
             else:  # IPv4
-                return self.fake.ipv4()
+                return str(self.fake.ipv4())
         
         elif entity_type == "URL":
-            return self.fake.url()
+            return str(self.fake.url())
         
         elif entity_type == "USERNAME":
-            return self.fake.user_name()
+            return str(self.fake.user_name())
         
         elif entity_type == "DATE":
             return str(self.fake.date())
@@ -198,7 +198,7 @@ class SyntheticAnonymizer(BaseAnonymizer):
         
         else:
             # Fallback: generate a word
-            return self.fake.word()
+            return str(self.fake.word())
     
     def get_mapping(self) -> Dict[str, str]:
         """

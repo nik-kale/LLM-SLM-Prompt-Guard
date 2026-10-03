@@ -190,7 +190,8 @@ class RedisMappingStorage:
             True if deleted, False if not found
         """
         mapping_key = self._make_key(session_id, "mapping")
-        result = self.client.delete(mapping_key) > 0
+        deleted: int = self.client.delete(mapping_key)
+        result = deleted > 0
 
         if result and self.enable_audit:
             self._audit_log("mapping_deleted", session_id, {})
@@ -215,7 +216,7 @@ class RedisMappingStorage:
             return False  # Key doesn't exist or has no expiry
 
         new_ttl = current_ttl + additional_seconds
-        return self.client.expire(mapping_key, new_ttl)
+        return bool(self.client.expire(mapping_key, new_ttl))
 
     def list_sessions(
         self,

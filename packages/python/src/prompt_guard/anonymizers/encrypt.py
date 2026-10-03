@@ -41,7 +41,7 @@ class EncryptAnonymizer(BaseAnonymizer):
         
         if encryption_key is None:
             # Generate new key
-            self.key = Fernet.generate_key()
+            self.key: bytes = Fernet.generate_key()
         else:
             self.key = encryption_key
         
@@ -83,8 +83,8 @@ class EncryptAnonymizer(BaseAnonymizer):
             Original decrypted value
         """
         encrypted_bytes = base64.urlsafe_b64decode(encrypted_value.encode('utf-8'))
-        decrypted = self.cipher.decrypt(encrypted_bytes).decode('utf-8')
-        return decrypted
+        decrypted: bytes = self.cipher.decrypt(encrypted_bytes)
+        return decrypted.decode('utf-8')
     
     def get_mapping(self) -> Dict[str, str]:
         """Get mapping from encrypted to original values."""
