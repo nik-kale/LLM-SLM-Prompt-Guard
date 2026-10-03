@@ -23,7 +23,8 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-benchmark>=4.0",
     "black>=23.0",
-    "mypy>=2.4,<3",
+    # mypy 2.x needs Python 3.10+; type checking runs on 3.11 in CI.
+    "mypy>=2.4,<3; python_version >= '3.10'",
     "ruff>=0.1.0",
 ]
 
