@@ -41,8 +41,13 @@ class TestCli:
         mapping_file = tmp_path / "mapping.json"
         anonymized_file = tmp_path / "anon.txt"
         restored_file = tmp_path / "restored.txt"
-        restored_file.write_text("stale")
-        os.chmod(restored_file, 0o640)
+        # A stale file created under the common 022 umask is readable by others.
+        old_umask = os.umask(0o022)
+        try:
+            restored_file.write_text("stale")
+        finally:
+            os.umask(old_umask)
+        assert stat.S_IMODE(restored_file.stat().st_mode) == 0o644
         runner = CliRunner()
 
         result = runner.invoke(
