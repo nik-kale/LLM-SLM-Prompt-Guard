@@ -22,7 +22,7 @@ try:
     PRESIDIO_AVAILABLE = True
 except ImportError:
     PRESIDIO_AVAILABLE = False
-    logger.warning(
+    logger.debug(
         "Presidio not available. Install with: pip install presidio-analyzer"
     )
 

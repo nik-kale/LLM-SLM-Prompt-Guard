@@ -18,7 +18,7 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-    logger.warning("LangChain not available. Install with: pip install langchain")
+    logger.debug("LangChain not available. Install with: pip install langchain")
 
 
 if LANGCHAIN_AVAILABLE:

@@ -20,7 +20,7 @@ try:
     SPACY_AVAILABLE = True
 except ImportError:
     SPACY_AVAILABLE = False
-    logger.warning("spaCy not available. Install with: pip install spacy")
+    logger.debug("spaCy not available. Install with: pip install spacy")
 
 
 class SpacyDetector(BaseDetector):

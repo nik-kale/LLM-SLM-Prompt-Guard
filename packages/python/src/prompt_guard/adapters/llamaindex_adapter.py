@@ -27,7 +27,7 @@ except ImportError:
         LLAMAINDEX_AVAILABLE = True
     except ImportError:
         LLAMAINDEX_AVAILABLE = False
-        logger.warning("LlamaIndex not available. Install with: pip install llama-index")
+        logger.debug("LlamaIndex not available. Install with: pip install llama-index")
 
 
 if LLAMAINDEX_AVAILABLE:

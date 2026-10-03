@@ -18,7 +18,7 @@ try:
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
-    logger.warning("Redis not available. Install with: pip install redis")
+    logger.debug("Redis not available. Install with: pip install redis")
 
 
 class RedisMappingStorage:

@@ -23,7 +23,7 @@ try:
     POSTGRES_AVAILABLE = True
 except ImportError:
     POSTGRES_AVAILABLE = False
-    logger.warning(
+    logger.debug(
         "PostgreSQL driver not available. Install with: pip install psycopg2-binary"
     )
 

@@ -96,7 +96,7 @@ class JSONFormatter(logging.Formatter):
                 "levelname", "levelno", "lineno", "module", "msecs",
                 "message", "pathname", "process", "processName",
                 "relativeCreated", "thread", "threadName", "exc_info",
-                "exc_text", "stack_info",
+                "exc_text", "stack_info", "taskName",
             }
             
             extra_fields = {}
@@ -140,6 +140,7 @@ class StructuredLogger:
         name: str,
         level: int = logging.INFO,
         json_format: bool = True,
+        add_handler: bool = True,
     ):
         """
         Initialize structured logger.
@@ -148,8 +149,14 @@ class StructuredLogger:
             name: Logger name
             level: Logging level
             json_format: Use JSON formatting
+            add_handler: Attach a stream handler and set the level on the
+                logger. Pass False to only wrap the logger and leave output
+                to configure_logging() or the application's logging setup.
         """
         self.logger = logging.getLogger(name)
+        if not add_handler:
+            return
+
         self.logger.setLevel(level)
         
         # Remove existing handlers to avoid duplicates
@@ -260,13 +267,23 @@ def configure_logging(
             component_logger.setLevel(numeric_component_level)
 
 
+# A library must not configure logging on import: the package logger gets a
+# NullHandler, and output is enabled by configure_logging() or by the
+# application's own logging configuration.
+logging.getLogger("prompt_guard").addHandler(logging.NullHandler())
+
 # Default logger instance
-default_logger = StructuredLogger("prompt_guard")
+default_logger = StructuredLogger("prompt_guard", add_handler=False)
 
 
 def get_logger(name: str) -> StructuredLogger:
     """
     Get a structured logger instance.
+
+    The logger propagates to the "prompt_guard" logger, so call
+    configure_logging() (or configure logging in the application) to see its
+    output. It does not add a handler of its own, which used to print every
+    record twice once configure_logging() had run.
     
     Args:
         name: Logger name
@@ -274,5 +291,5 @@ def get_logger(name: str) -> StructuredLogger:
     Returns:
         StructuredLogger instance
     """
-    return StructuredLogger(f"prompt_guard.{name}")
+    return StructuredLogger(f"prompt_guard.{name}", add_handler=False)
 
