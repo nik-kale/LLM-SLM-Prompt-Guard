@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mapping.
 - The email patterns no longer backtrack quadratically; 1 MB of text without
   an `@` took minutes to scan.
+- `JSONFormatter` logs the exception type and stack frames but not the
+  exception message, which often quotes the input; pass
+  `include_exception_messages=True` to restore it. The telemetry decorators
+  likewise export only the exception type on failed spans.
 
 ### Fixed
 

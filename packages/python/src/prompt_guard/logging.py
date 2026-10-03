@@ -4,6 +4,7 @@ Structured JSON logging for Prompt Guard with correlation IDs and context enrich
 
 import logging
 import json
+import traceback
 import uuid
 from typing import Any, Dict, Optional
 from contextvars import ContextVar
@@ -29,18 +30,23 @@ class JSONFormatter(logging.Formatter):
     - session_id: PII session identifier
     - user_id: User identifier
     - context: Additional context fields
-    - exception: Exception details if present
+    - exception: Exception type and stack frames if present
     """
     
-    def __init__(self, include_extra: bool = True):
+    def __init__(self, include_extra: bool = True, include_exception_messages: bool = False):
         """
         Initialize JSON formatter.
         
         Args:
             include_extra: Include extra fields from log record
+            include_exception_messages: Include exception messages and the
+                full formatted traceback. Off by default because exception
+                text often quotes the input being processed, which for this
+                package is the PII it is protecting.
         """
         super().__init__()
         self.include_extra = include_extra
+        self.include_exception_messages = include_exception_messages
     
     def format(self, record: logging.LogRecord) -> str:
         """
@@ -82,11 +88,19 @@ class JSONFormatter(logging.Formatter):
         
         # Add exception info if present
         if record.exc_info:
-            log_data["exception"] = {
-                "type": record.exc_info[0].__name__ if record.exc_info[0] else None,
-                "message": str(record.exc_info[1]) if record.exc_info[1] else None,
-                "traceback": self.formatException(record.exc_info),
-            }
+            exc_type, exc_value, exc_tb = record.exc_info
+            if self.include_exception_messages:
+                log_data["exception"] = {
+                    "type": exc_type.__name__ if exc_type else None,
+                    "message": str(exc_value) if exc_value else None,
+                    "traceback": self.formatException(record.exc_info),
+                }
+            else:
+                # Stack frames locate the failure without the message text
+                log_data["exception"] = {
+                    "type": exc_type.__name__ if exc_type else None,
+                    "traceback": "".join(traceback.format_tb(exc_tb)) if exc_tb else None,
+                }
         
         # Add extra fields (excluding standard fields)
         if self.include_extra:

@@ -44,3 +44,38 @@ def test_configured_logger_emits_each_record_once(capsys):
     finally:
         root.handlers = saved_handlers
         root.setLevel(saved_level)
+
+
+def _record_with_exception(message):
+    try:
+        raise ValueError(message)
+    except ValueError:
+        import sys
+
+        return logging.LogRecord(
+            "prompt_guard.test", logging.ERROR, __file__, 1, "failed", None, sys.exc_info()
+        )
+
+
+def test_json_logs_leave_out_exception_messages():
+    # Exception text often quotes the input; it used to be logged verbatim
+    # (message and traceback) by JSONFormatter.
+    from prompt_guard.logging import JSONFormatter
+
+    record = _record_with_exception("could not parse 'jane@example.com'")
+
+    data = json.loads(JSONFormatter().format(record))
+
+    assert data["exception"]["type"] == "ValueError"
+    assert "_record_with_exception" in data["exception"]["traceback"]
+    assert "jane@example.com" not in json.dumps(data)
+
+
+def test_exception_messages_can_be_enabled():
+    from prompt_guard.logging import JSONFormatter
+
+    record = _record_with_exception("details")
+
+    data = json.loads(JSONFormatter(include_exception_messages=True).format(record))
+
+    assert data["exception"]["message"] == "details"

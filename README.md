@@ -725,7 +725,7 @@ We use GitHub Actions for continuous integration and deployment:
 
 ```bash
 # Run tests like CI
-pip install -e "packages/python[dev,proxy,faker,cryptography]"
+pip install -e "packages/python[dev,proxy,faker,cryptography,opentelemetry]"
 (cd packages/python && pytest tests/unit tests/integration tests/security)
 (cd packages/proxy && pytest tests)
 
