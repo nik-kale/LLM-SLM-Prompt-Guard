@@ -1,0 +1,17 @@
+.git
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+**/coverage.xml
+**/htmlcov
+**/build
+**/dist
+**/node_modules
+**/.venv
+**/venv
+docs/_build
+eval/results

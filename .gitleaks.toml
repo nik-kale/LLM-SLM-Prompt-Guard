@@ -1,0 +1,12 @@
+# Gitleaks configuration (picked up automatically by gitleaks and gitleaks-action).
+title = "LLM-SLM-Prompt-Guard"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Made-up credentials used as sample PII in docs and evaluation data"
+regexes = [
+  '''sk-abc123xyz789''',
+  '''abc123xyz456''',
+]
