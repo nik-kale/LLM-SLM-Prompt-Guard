@@ -6,7 +6,6 @@ import importlib.util
 
 import pytest
 from prompt_guard import PromptGuard
-from prompt_guard.types import AnonymizeOptions
 
 
 class TestPromptGuardBasic:

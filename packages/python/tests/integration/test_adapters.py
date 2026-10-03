@@ -5,7 +5,7 @@ Comprehensive integration tests for framework adapters.
 import importlib.util
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock
 from prompt_guard import PromptGuard
 
 
@@ -51,7 +51,7 @@ class TestLangChainAdapter:
         protected_chat = ProtectedChatLLM(chat=mock_chat, guard=guard)
 
         messages = [HumanMessage(content="Email: test@example.com")]
-        response = protected_chat(messages)
+        protected_chat(messages)
 
         # Verify PII was masked in the call to underlying chat
         call_args = mock_chat.call_args[0][0]
@@ -130,8 +130,8 @@ class TestCaching:
 
         text = "Email: john@example.com"
 
-        result1 = cached_guard1.anonymize(text)
-        result2 = cached_guard2.anonymize(text)
+        cached_guard1.anonymize(text)
+        cached_guard2.anonymize(text)
 
         # Different policies should create different cache entries
         assert len(cache) == 2

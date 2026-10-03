@@ -171,19 +171,10 @@ class TestMemoryUsage:
         tracemalloc.start()
 
         guard = PromptGuard()
-        text = "Email: john@example.com"
-
-        # Take snapshot before
-        snapshot1 = tracemalloc.take_snapshot()
 
         # Process 1000 texts
         for i in range(1000):
             guard.anonymize(f"Email: user{i}@example.com")
-
-        # Take snapshot after
-        snapshot2 = tracemalloc.take_snapshot()
-
-        top_stats = snapshot2.compare_to(snapshot1, "lineno")
 
         # Get peak memory
         current, peak = tracemalloc.get_traced_memory()
@@ -238,7 +229,7 @@ class TestLatencyDistribution:
         cut_points = statistics.quantiles(latencies, n=100)
         p50, p95, p99 = cut_points[49], cut_points[94], cut_points[98]
 
-        print(f"\nLatency Distribution:")
+        print("\nLatency Distribution:")
         print(f"  P50: {p50:.2f}ms")
         print(f"  P95: {p95:.2f}ms")
         print(f"  P99: {p99:.2f}ms")

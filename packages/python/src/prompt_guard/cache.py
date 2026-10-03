@@ -305,7 +305,8 @@ class CachedPromptGuard:
 
     def deanonymize(self, text: str, mapping: Dict[str, str]) -> str:
         """De-anonymize text (no caching needed)."""
-        return self.guard.deanonymize(text, mapping)
+        result: str = self.guard.deanonymize(text, mapping)
+        return result
 
     def clear_cache(self) -> None:
         """Clear all cache entries."""

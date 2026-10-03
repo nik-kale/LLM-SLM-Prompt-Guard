@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Dict, Tuple, Any, Optional, Callable, Union
+from typing import List, Dict, Tuple, Any, Optional, Callable, Sequence, Union
 import pathlib
 import re
 
@@ -45,7 +45,7 @@ class PromptGuard:
 
     def __init__(
         self,
-        detectors: List[Union[str, BaseDetector]] | None = None,
+        detectors: Sequence[Union[str, BaseDetector]] | None = None,
         policy: str = "default_pii",
         custom_policy_path: str | None = None,
         overlap_strategy: OverlapStrategy = OverlapStrategy.LONGEST_MATCH,
@@ -65,7 +65,7 @@ class PromptGuard:
         self.policy = self._load_policy(policy, custom_policy_path)
         self.overlap_strategy = overlap_strategy
 
-    def _init_detectors(self, names: List[Union[str, BaseDetector]]) -> List[BaseDetector]:
+    def _init_detectors(self, names: Sequence[Union[str, BaseDetector]]) -> List[BaseDetector]:
         """Initialize detector backends from names or detector instances."""
         instances: List[BaseDetector] = []
         for name in names:
@@ -113,7 +113,10 @@ class PromptGuard:
             raise FileNotFoundError(f"Policy file not found: {policy_path}")
 
         with policy_path.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+            policy = yaml.safe_load(f)
+        if not isinstance(policy, dict):
+            raise ValueError(f"Policy file must contain a YAML mapping: {policy_path}")
+        return policy
 
     def _resolve_overlaps(
         self,
@@ -328,8 +331,8 @@ class PromptGuard:
 
         mapping: Mapping = dict(existing_mapping) if existing_mapping else {}
         placeholder_for: Dict[str, str] = {}
-        for placeholder, original in mapping.items():
-            placeholder_for.setdefault(original, placeholder)
+        for existing_placeholder, original in mapping.items():
+            placeholder_for.setdefault(original, existing_placeholder)
 
         anonymized = []
         last_idx = 0
@@ -347,7 +350,7 @@ class PromptGuard:
             # Add text before this entity
             anonymized.append(text[last_idx : res.start])
 
-            placeholder = placeholder_for.get(original) if storable else None
+            placeholder: Optional[str] = placeholder_for.get(original) if storable else None
             if placeholder is None:
                 template = entity_cfg.get("placeholder", f"[{res.entity_type}_{{i}}]")
                 placeholder = self._next_placeholder(template, counters, mapping)

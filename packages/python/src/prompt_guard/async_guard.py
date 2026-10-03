@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import List, Dict, Tuple, Any, AsyncIterator, Optional, Union
+from typing import List, Dict, Tuple, Any, AsyncIterator, Optional, Sequence, Union
 
 from .detectors.base import BaseDetector
 from .guard import PromptGuard
@@ -47,7 +47,7 @@ class AsyncPromptGuard:
 
     def __init__(
         self,
-        detectors: List[Union[str, BaseDetector]] | None = None,
+        detectors: Sequence[Union[str, BaseDetector]] | None = None,
         policy: str = "default_pii",
         custom_policy_path: str | None = None,
         max_concurrent: int = 10,
@@ -292,7 +292,7 @@ class AsyncPromptGuard:
 
 # Convenience factory function
 def create_async_guard(
-    detectors: List[str] | None = None,
+    detectors: Sequence[Union[str, BaseDetector]] | None = None,
     policy: str = "default_pii",
     **kwargs
 ) -> AsyncPromptGuard:

@@ -7,7 +7,7 @@ automatically anonymizing prompts and de-anonymizing responses.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Dict, Mapping as TypeMapping
+from typing import Any, List, Optional, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ if LANGCHAIN_AVAILABLE:
                 self._mappings[prompt] = mapping
 
             # Call the underlying LLM
-            response = self.llm(
+            response: str = self.llm(
                 anonymized_prompt,
                 stop=stop,
                 callbacks=run_manager.get_child() if run_manager else None,

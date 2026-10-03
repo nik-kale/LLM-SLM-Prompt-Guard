@@ -2,7 +2,7 @@
 OpenTelemetry integration for distributed tracing and metrics.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Optional
 from functools import wraps
 import time
 
@@ -19,8 +19,8 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
     # Provide no-op implementations
-    trace = None
-    metrics = None
+    trace = None  # type: ignore[assignment]
+    metrics = None  # type: ignore[assignment]
 
 
 class TelemetryConfig:

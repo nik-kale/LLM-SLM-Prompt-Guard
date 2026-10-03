@@ -5,10 +5,10 @@ Provides persistent, distributed storage for PII mappings across
 multiple instances and sessions.
 """
 
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,8 @@ class RedisMappingStorage:
         if self.enable_audit:
             self._audit_log("mapping_retrieved", session_id, {})
 
-        return json.loads(data)
+        mapping: Dict[str, str] = json.loads(data)
+        return mapping
 
     def delete_mapping(self, session_id: str) -> bool:
         """
@@ -298,7 +299,7 @@ class RedisMappingStorage:
 
         return logs
 
-    def health_check(self) -> Dict[str, any]:
+    def health_check(self) -> Dict[str, Any]:
         """
         Check Redis connection health.
 

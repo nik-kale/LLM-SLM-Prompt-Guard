@@ -13,7 +13,7 @@ This detector provides comprehensive pattern matching for:
 
 import bisect
 import re
-from typing import List, Dict, Pattern
+from typing import List, Optional, Pattern
 from .base import BaseDetector
 from ..types import DetectorResult
 
@@ -156,7 +156,7 @@ class EnhancedRegexDetector(BaseDetector):
     - CRYPTO_ADDRESS: Cryptocurrency addresses (BTC, ETH)
     """
 
-    def __init__(self, enable_all: bool = True, entity_types: List[str] = None):
+    def __init__(self, enable_all: bool = True, entity_types: Optional[List[str]] = None):
         """
         Initialize enhanced regex detector.
 
@@ -275,7 +275,7 @@ class EnhancedRegexDetector(BaseDetector):
 # Convenience function
 def create_enhanced_detector(
     enable_all: bool = True,
-    entity_types: List[str] = None
+    entity_types: Optional[List[str]] = None
 ) -> EnhancedRegexDetector:
     """Create an enhanced regex detector instance."""
     return EnhancedRegexDetector(enable_all=enable_all, entity_types=entity_types)

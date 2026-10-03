@@ -5,8 +5,7 @@ Structured JSON logging for Prompt Guard with correlation IDs and context enrich
 import logging
 import json
 import uuid
-import time
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from contextvars import ContextVar
 from datetime import datetime
 
@@ -54,7 +53,7 @@ class JSONFormatter(logging.Formatter):
             JSON-formatted log string
         """
         # Base log structure
-        log_data = {
+        log_data: Dict[str, Any] = {
             "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
             "level": record.levelname,
             "logger": record.name,
@@ -165,6 +164,7 @@ class StructuredLogger:
         # Create handler
         handler = logging.StreamHandler()
         
+        formatter: logging.Formatter
         if json_format:
             formatter = JSONFormatter()
         else:
@@ -249,6 +249,7 @@ def configure_logging(
     
     handler = logging.StreamHandler()
     
+    formatter: logging.Formatter
     if json_format:
         formatter = JSONFormatter()
     else:

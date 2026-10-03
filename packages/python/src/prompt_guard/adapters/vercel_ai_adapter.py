@@ -257,7 +257,7 @@ class ProtectedStreamingChat:
         anonymized_messages, mapping = await self.adapter.protect_messages(messages)
 
         # Call LLM (simplified - actual implementation would use Vercel AI SDK)
-        response = {
+        response: Dict[str, Any] = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "model": self.model,

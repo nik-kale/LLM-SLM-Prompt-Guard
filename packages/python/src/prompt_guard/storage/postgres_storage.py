@@ -10,13 +10,12 @@ Provides persistent, ACID-compliant storage for:
 
 from typing import Dict, Optional, List, Any
 from datetime import datetime, timedelta
-import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 try:
-    import psycopg2
+    import psycopg2  # noqa: F401
     from psycopg2.extras import Json, RealDictCursor
     from psycopg2.pool import SimpleConnectionPool
 
@@ -309,7 +308,7 @@ class PostgresAuditLogger:
                 (session_id, placeholder, original_value, entity_type),
             )
 
-            mapping_id = cursor.fetchone()[0]
+            mapping_id = int(cursor.fetchone()[0])
             conn.commit()
 
             return mapping_id
@@ -398,7 +397,7 @@ class PostgresAuditLogger:
                 ),
             )
 
-            event_id = cursor.fetchone()[0]
+            event_id = int(cursor.fetchone()[0])
             conn.commit()
 
             return event_id
@@ -483,8 +482,8 @@ class PostgresAuditLogger:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Build query dynamically
-            conditions = []
-            params = []
+            conditions: List[str] = []
+            params: List[Any] = []
 
             if session_id:
                 conditions.append("session_id = %s")
@@ -549,8 +548,8 @@ class PostgresAuditLogger:
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-            conditions = []
-            params = []
+            conditions: List[str] = []
+            params: List[Any] = []
 
             if user_id:
                 conditions.append("user_id = %s")
@@ -627,7 +626,7 @@ class PostgresAuditLogger:
                 """
             )
 
-            deleted = cursor.rowcount
+            deleted = int(cursor.rowcount)
             conn.commit()
 
             logger.info(f"Cleaned up {deleted} expired sessions")

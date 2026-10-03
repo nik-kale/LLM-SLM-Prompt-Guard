@@ -7,22 +7,20 @@ automatically anonymizing queries and de-anonymizing responses.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Dict
+from typing import Any, Optional, Dict
 import logging
 
 logger = logging.getLogger(__name__)
 
 try:
-    from llama_index.core.base.base_query_engine import BaseQueryEngine
+    from llama_index.core.base.base_query_engine import BaseQueryEngine  # noqa: F401
     from llama_index.core.base.response.schema import Response, StreamingResponse
-    from llama_index.core.chat_engine.types import BaseChatEngine
-    from llama_index.core.schema import QueryBundle
 
     LLAMAINDEX_AVAILABLE = True
 except ImportError:
     try:
         # Try older import path
-        from llama_index import BaseQueryEngine, Response, StreamingResponse
+        from llama_index import BaseQueryEngine, Response, StreamingResponse  # noqa: F401
 
         LLAMAINDEX_AVAILABLE = True
     except ImportError:

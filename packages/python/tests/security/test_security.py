@@ -228,7 +228,7 @@ class TestCacheSecurity:
 
         # Normal usage
         text = "Email: john@example.com"
-        result1 = cached_guard.anonymize(text)
+        cached_guard.anonymize(text)
 
         # Try to poison cache by directly manipulating it
         # (This shouldn't affect the guard's behavior)
@@ -257,7 +257,7 @@ class TestStorageSecurity:
                 redis_url="redis://:wrongpassword@localhost:6379"
             )
             # Try to use it
-            session_id = storage.create_session()
+            storage.create_session()
             pytest.fail("Should have raised authentication error")
         except Exception as e:
             # Should fail with auth error, not crash
@@ -306,7 +306,7 @@ class TestComplianceSecurity:
         assert guard.policy["name"] == "hipaa_phi"
 
         # Verify audit requirements
-        assert guard.policy.get("audit", {}).get("required", False) == True
+        assert guard.policy.get("audit", {}).get("required", False) is True
 
     def test_pci_dss_cvv_never_stored(self):
         """Test that CVV is never stored (PCI-DSS requirement)."""
@@ -400,13 +400,11 @@ class TestErrorHandling:
         cache = InMemoryCache(max_size=10)
         cached_guard = CachedPromptGuard(guard, cache)
 
-        initial_size = len(cache)
-
         # Trigger errors
         for i in range(20):
             try:
                 cached_guard.anonymize("a" * (10 * 1024 * 1024))  # Large text
-            except:
+            except Exception:
                 pass
 
         # Force garbage collection

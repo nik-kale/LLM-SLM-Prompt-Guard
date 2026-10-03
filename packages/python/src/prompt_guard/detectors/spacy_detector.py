@@ -119,7 +119,7 @@ class SpacyDetector(BaseDetector):
                 if pipe in self.nlp.pipe_names and pipe != "ner":
                     try:
                         self.nlp.disable_pipe(pipe)
-                    except:
+                    except Exception:
                         pass
 
     def detect(self, text: str) -> List[DetectorResult]:

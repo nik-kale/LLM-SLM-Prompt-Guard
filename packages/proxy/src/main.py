@@ -22,17 +22,15 @@ from __future__ import annotations
 
 import sys
 import os
-import asyncio
 import copy
 import json
-import logging
 from typing import Dict, Optional, List
 from dataclasses import dataclass
 
 # Add parent package to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../python/src"))
 
-from fastapi import FastAPI, Request, HTTPException, Header, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
