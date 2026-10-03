@@ -21,6 +21,7 @@ Usage:
 import sys
 import os
 import asyncio
+import copy
 import json
 import logging
 from typing import Dict, Optional, List
@@ -89,7 +90,7 @@ class LLMProxy:
         "anthropic": {
             "base_url": "https://api.anthropic.com",
             "auth_header": "x-api-key",
-            "message_paths": ["messages", "prompt"],
+            "message_paths": ["system", "messages", "prompt"],
         },
     }
 
@@ -281,6 +282,9 @@ class LLMProxy:
         """
         Anonymize PII in request body.
 
+        All message fields share one mapping, so a placeholder means the same
+        value everywhere in the request and in the response.
+
         Args:
             body: Request body
             provider_config: Provider configuration
@@ -288,33 +292,44 @@ class LLMProxy:
         Returns:
             Tuple of (anonymized_body, pii_mapping)
         """
-        anonymized_body = body.copy()
-        combined_mapping = {}
+        anonymized_body = copy.deepcopy(body)
+        mapping: Dict[str, str] = {}
 
-        # Find and anonymize message fields
-        message_paths = provider_config["message_paths"]
-
-        for path in message_paths:
+        for path in provider_config["message_paths"]:
             if path in anonymized_body:
-                content = anonymized_body[path]
+                anonymized_body[path], mapping = self._anonymize_content(
+                    anonymized_body[path], mapping
+                )
 
-                # Handle different message formats
-                if isinstance(content, str):
-                    anonymized, mapping = self.guard.anonymize(content)
-                    anonymized_body[path] = anonymized
-                    combined_mapping.update(mapping)
+        return anonymized_body, mapping
 
-                elif isinstance(content, list):
-                    # Handle chat messages
-                    for i, message in enumerate(content):
-                        if isinstance(message, dict) and "content" in message:
-                            anonymized, mapping = self.guard.anonymize(
-                                message["content"]
-                            )
-                            anonymized_body[path][i]["content"] = anonymized
-                            combined_mapping.update(mapping)
+    def _anonymize_content(self, content, mapping: Dict[str, str]):
+        """
+        Anonymize a message field: a string, a list of messages, or a list of
+        content blocks such as ``{"type": "text", "text": ...}``.
+        """
+        if isinstance(content, str):
+            return self.guard.anonymize(content, existing_mapping=mapping)
 
-        return anonymized_body, combined_mapping
+        if isinstance(content, list):
+            anonymized = []
+            for item in content:
+                if isinstance(item, (str, list)):
+                    item, mapping = self._anonymize_content(item, mapping)
+                elif isinstance(item, dict):
+                    item = dict(item)
+                    if "content" in item:
+                        item["content"], mapping = self._anonymize_content(
+                            item["content"], mapping
+                        )
+                    if item.get("type") == "text" and isinstance(item.get("text"), str):
+                        item["text"], mapping = self.guard.anonymize(
+                            item["text"], existing_mapping=mapping
+                        )
+                anonymized.append(item)
+            return anonymized, mapping
+
+        return content, mapping
 
     def _deanonymize_response_body(
         self,

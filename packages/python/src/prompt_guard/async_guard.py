@@ -11,18 +11,29 @@ This module provides AsyncPromptGuard which supports:
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import List, Dict, Tuple, Any, AsyncIterator, Optional
-import pathlib
-import yaml
 
-from .detectors.regex_detector import RegexDetector
-from .types import DetectorResult, Mapping, AnonymizeResult, AnonymizeOptions, DetectionReport
+from .guard import PromptGuard
+from .types import (
+    DetectorResult,
+    Mapping,
+    AnonymizeResult,
+    AnonymizeOptions,
+    DetectionReport,
+    OverlapStrategy,
+)
 from .report import generate_detection_report
+
+_WHITESPACE_RUN = re.compile(r"\s+")
 
 
 class AsyncPromptGuard:
     """
     Async version of PromptGuard for async/await patterns.
+
+    Detection runs in the default executor; overlap resolution, placeholder
+    assignment and de-anonymization are shared with :class:`PromptGuard`.
 
     Example:
         >>> import asyncio
@@ -39,6 +50,7 @@ class AsyncPromptGuard:
         policy: str = "default_pii",
         custom_policy_path: str | None = None,
         max_concurrent: int = 10,
+        overlap_strategy: OverlapStrategy = OverlapStrategy.LONGEST_MATCH,
     ):
         """
         Initialize AsyncPromptGuard.
@@ -48,55 +60,48 @@ class AsyncPromptGuard:
             policy: Name of built-in policy to use
             custom_policy_path: Path to a custom policy YAML file
             max_concurrent: Maximum concurrent operations for batch processing
+            overlap_strategy: Strategy for resolving overlapping entity detections
         """
-        self.detectors = self._init_detectors(detectors or ["regex"])
-        self.policy = self._load_policy(policy, custom_policy_path)
+        self._guard = PromptGuard(
+            detectors=detectors,
+            policy=policy,
+            custom_policy_path=custom_policy_path,
+            overlap_strategy=overlap_strategy,
+        )
         self.max_concurrent = max_concurrent
-        self._semaphore = asyncio.Semaphore(max_concurrent)
+        # Created on first use so it belongs to the running event loop.
+        self._semaphore: Optional[asyncio.Semaphore] = None
+        self._semaphore_loop: Optional[asyncio.AbstractEventLoop] = None
 
-    def _init_detectors(self, names: List[str]):
-        """Initialize detector backends."""
-        instances = []
-        for name in names:
-            if name == "regex":
-                instances.append(RegexDetector())
-            elif name == "presidio":
-                try:
-                    from .detectors.presidio_detector import PresidioDetector
-                    instances.append(PresidioDetector())
-                except ImportError:
-                    raise ValueError(
-                        "Presidio detector is not available. "
-                        "Install it with: pip install presidio-analyzer"
-                    )
-            else:
-                raise ValueError(
-                    f"Unknown detector backend: {name}. "
-                    f"Currently supported: ['regex', 'presidio']"
-                )
-        return instances
+    @property
+    def detectors(self) -> List[Any]:
+        return self._guard.detectors
 
-    def _load_policy(
-        self, policy_name: str, custom_path: str | None = None
-    ) -> Dict[str, Any]:
-        """Load policy configuration from YAML file."""
-        if custom_path:
-            policy_path = pathlib.Path(custom_path)
-        else:
-            policy_path = (
-                pathlib.Path(__file__).parent / "policies" / f"{policy_name}.yaml"
-            )
+    @detectors.setter
+    def detectors(self, value: List[Any]) -> None:
+        self._guard.detectors = value
 
-        if not policy_path.exists():
-            raise FileNotFoundError(f"Policy file not found: {policy_path}")
+    @property
+    def policy(self) -> Dict[str, Any]:
+        return self._guard.policy
 
-        with policy_path.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+    @policy.setter
+    def policy(self, value: Dict[str, Any]) -> None:
+        self._guard.policy = value
+
+    def _get_semaphore(self) -> asyncio.Semaphore:
+        loop = asyncio.get_running_loop()
+        if self._semaphore is None or self._semaphore_loop is not loop:
+            self._semaphore = asyncio.Semaphore(self.max_concurrent)
+            self._semaphore_loop = loop
+        return self._semaphore
 
     async def anonymize_async(
         self,
         text: str,
         options: Optional[AnonymizeOptions] = None,
+        *,
+        existing_mapping: Optional[Mapping] = None,
     ) -> AnonymizeResult:
         """
         Asynchronously anonymize PII in the given text.
@@ -104,79 +109,34 @@ class AsyncPromptGuard:
         Args:
             text: The text to anonymize
             options: Anonymization options
+            existing_mapping: Mapping to continue, see :meth:`PromptGuard.anonymize`
 
         Returns:
             A tuple of (anonymized_text, mapping)
         """
-        # Run detection in executor to avoid blocking
-        loop = asyncio.get_event_loop()
-        all_results = await loop.run_in_executor(
-            None, self._run_detectors, text
-        )
+        all_results = await self._run_detectors_async(text)
+        return self._anonymize_with_results(text, all_results, options, existing_mapping)
 
-        # Process results (this is fast, so we can do it inline)
-        return self._anonymize_with_results(text, all_results, options)
+    async def _run_detectors_async(self, text: str) -> List[DetectorResult]:
+        """Run detection in the default executor to avoid blocking the loop."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._run_detectors, text)
 
     def _run_detectors(self, text: str) -> List[DetectorResult]:
         """Run all detectors on the text."""
-        all_results: List[DetectorResult] = []
-        for detector in self.detectors:
-            all_results.extend(detector.detect(text))
-        return all_results
+        return self._guard._detect(text)
 
     def _anonymize_with_results(
         self,
         text: str,
         all_results: List[DetectorResult],
         options: Optional[AnonymizeOptions] = None,
+        existing_mapping: Optional[Mapping] = None,
     ) -> AnonymizeResult:
         """Anonymize text using detection results."""
-        if options is None:
-            options = AnonymizeOptions()
-
-        # Filter by confidence if needed
-        if options.min_confidence > 0:
-            all_results = [
-                r for r in all_results
-                if r.confidence is None or r.confidence >= options.min_confidence
-            ]
-
-        # Sort by start index for stable replacements
-        all_results.sort(key=lambda r: r.start)
-
-        policy_entities = self.policy.get("entities", {})
-        mapping: Mapping = {}
-        anonymized = []
-        last_idx = 0
-
-        # Counter per entity type
-        counters: Dict[str, int] = {}
-
-        for res in all_results:
-            entity_cfg = policy_entities.get(res.entity_type)
-            if not entity_cfg:
-                continue  # skip unconfigured entity types
-
-            # Add text before this entity
-            anonymized.append(text[last_idx : res.start])
-
-            # Compute placeholder
-            counters[res.entity_type] = counters.get(res.entity_type, 0) + 1
-            i = counters[res.entity_type]
-            placeholder_tpl = entity_cfg.get(
-                "placeholder", f"[{res.entity_type}_{{i}}]"
-            )
-            placeholder = placeholder_tpl.format(i=i)
-
-            anonymized.append(placeholder)
-            mapping[placeholder] = res.text
-
-            last_idx = res.end
-
-        # Add trailing text
-        anonymized.append(text[last_idx:])
-
-        return "".join(anonymized), mapping
+        return self._guard._anonymize_with_results(
+            text, all_results, options or AnonymizeOptions(), existing_mapping
+        )
 
     async def detect_only_async(
         self,
@@ -201,11 +161,7 @@ class AsyncPromptGuard:
         Returns:
             DetectionReport with statistics and risk assessment
         """
-        # Run detection in executor to avoid blocking
-        loop = asyncio.get_event_loop()
-        all_results = await loop.run_in_executor(
-            None, self._run_detectors, text
-        )
+        all_results = await self._run_detectors_async(text)
         
         # Filter by confidence if specified
         if min_confidence is not None and min_confidence > 0:
@@ -215,6 +171,7 @@ class AsyncPromptGuard:
             ]
         
         # Generate report in executor
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, generate_detection_report, text, all_results, include_preview
         )
@@ -230,10 +187,7 @@ class AsyncPromptGuard:
         Returns:
             Text with placeholders replaced by original values
         """
-        result = text
-        for placeholder, original in mapping.items():
-            result = result.replace(placeholder, original)
-        return result
+        return self._guard.deanonymize(text, mapping)
 
     async def batch_anonymize(
         self,
@@ -243,6 +197,8 @@ class AsyncPromptGuard:
         """
         Anonymize multiple texts concurrently.
 
+        Each text gets its own mapping.
+
         Args:
             texts: List of texts to anonymize
             options: Anonymization options
@@ -250,8 +206,10 @@ class AsyncPromptGuard:
         Returns:
             List of (anonymized_text, mapping) tuples
         """
+        semaphore = self._get_semaphore()
+
         async def _anonymize_one(text: str) -> AnonymizeResult:
-            async with self._semaphore:
+            async with semaphore:
                 return await self.anonymize_async(text, options)
 
         tasks = [_anonymize_one(text) for text in texts]
@@ -261,38 +219,74 @@ class AsyncPromptGuard:
         self,
         text_stream: AsyncIterator[str],
         options: Optional[AnonymizeOptions] = None,
+        chunk_size: int = 100,
+        holdback: int = 64,
     ) -> AsyncIterator[Tuple[str, Mapping]]:
         """
         Anonymize a stream of text chunks.
 
+        Incoming chunks are buffered and emitted in pieces of roughly
+        ``chunk_size`` characters. A piece never ends inside a detected entity
+        and always leaves the last ``holdback`` characters in the buffer, so
+        PII that arrives split across chunks is still detected as a whole.
+        All pieces share one mapping, so placeholders stay unique.
+
         Args:
             text_stream: Async iterator of text chunks
             options: Anonymization options
+            chunk_size: Minimum number of characters to emit at a time
+            holdback: Characters kept back as context for the next piece
 
         Yields:
-            Tuples of (anonymized_chunk, cumulative_mapping)
+            Tuples of (anonymized_piece, cumulative_mapping)
         """
-        cumulative_mapping: Mapping = {}
+        mapping: Mapping = {}
         buffer = ""
-        chunk_size = 100  # Process in chunks for efficiency
 
         async for chunk in text_stream:
             buffer += chunk
+            if len(buffer) < chunk_size + holdback:
+                continue
 
-            # Process when buffer reaches chunk size
-            if len(buffer) >= chunk_size:
-                anonymized, new_mapping = await self.anonymize_async(
-                    buffer, options
-                )
-                cumulative_mapping.update(new_mapping)
-                yield anonymized, cumulative_mapping
-                buffer = ""
+            results = await self._run_detectors_async(buffer)
+            cut = self._safe_cut(buffer, results, len(buffer) - holdback)
+            if cut <= 0:
+                continue
+
+            head = [r for r in results if r.end <= cut]
+            anonymized, mapping = self._anonymize_with_results(
+                buffer[:cut], head, options, mapping
+            )
+            yield anonymized, mapping
+            buffer = buffer[cut:]
 
         # Process remaining buffer
         if buffer:
-            anonymized, new_mapping = await self.anonymize_async(buffer, options)
-            cumulative_mapping.update(new_mapping)
-            yield anonymized, cumulative_mapping
+            anonymized, mapping = await self.anonymize_async(
+                buffer, options, existing_mapping=mapping
+            )
+            yield anonymized, mapping
+
+    @staticmethod
+    def _safe_cut(text: str, results: List[DetectorResult], limit: int) -> int:
+        """
+        Return the largest position <= ``limit`` that is not inside a detected
+        entity, preferring positions right after whitespace. Returns 0 if
+        there is none.
+        """
+        spans = [(r.start, r.end) for r in results]
+
+        def clear(position: int) -> bool:
+            return not any(start < position < end for start, end in spans)
+
+        for match in reversed(list(_WHITESPACE_RUN.finditer(text, 0, limit))):
+            if clear(match.end()):
+                return match.end()
+
+        position = limit
+        while position > 0 and not clear(position):
+            position = min(start for start, end in spans if start < position < end)
+        return position
 
 
 # Convenience factory function

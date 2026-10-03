@@ -320,19 +320,19 @@ class TestEndToEnd:
         guard = PromptGuard(policy="default_pii")
 
         # Turn 1
-        turn1 = "My email is john@example.com"
-        anon1, map1 = guard.anonymize(turn1)
+        anon1, mapping = guard.anonymize("My email is john@example.com")
 
         # Turn 2 - reference to same email
-        turn2 = "Please send the confirmation to that email"
-        anon2, map2 = guard.anonymize(turn2)
+        anon2, mapping = guard.anonymize(
+            "Please send the confirmation to that email", existing_mapping=mapping
+        )
 
-        # Turn 3 - new PII
-        turn3 = "Also CC sarah@example.com"
-        anon3, map3 = guard.anonymize(turn3)
+        # Turn 3 - new PII continues the numbering instead of reusing [EMAIL_1]
+        anon3, mapping = guard.anonymize("Also CC sarah@example.com", existing_mapping=mapping)
 
-        # Combine mappings for de-anonymization
-        combined_mapping = {**map1, **map2, **map3}
-
-        # Should be able to de-anonymize all turns
-        assert len(combined_mapping) >= 2  # At least 2 emails
+        assert anon1 == "My email is [EMAIL_1]"
+        assert anon3 == "Also CC [EMAIL_2]"
+        assert len(mapping) == 2
+        assert guard.deanonymize(f"{anon1}. {anon3}", mapping) == (
+            "My email is john@example.com. Also CC sarah@example.com"
+        )

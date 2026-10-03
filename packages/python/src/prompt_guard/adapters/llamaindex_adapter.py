@@ -200,10 +200,11 @@ if LLAMAINDEX_AVAILABLE:
                 Chat response
             """
             # Anonymize the message
-            anonymized_message, mapping = self.guard.anonymize(message)
-
-            # Update conversation mapping (accumulate across turns)
-            self._conversation_mapping.update(mapping)
+            # Continue the conversation mapping so placeholders from earlier
+            # turns keep their meaning and new values get new placeholders
+            anonymized_message, self._conversation_mapping = self.guard.anonymize(
+                message, existing_mapping=self._conversation_mapping
+            )
 
             # Chat with the underlying engine
             response = self.chat_engine.chat(anonymized_message)
@@ -228,10 +229,9 @@ if LLAMAINDEX_AVAILABLE:
                 Chat response
             """
             # Anonymize the message
-            anonymized_message, mapping = self.guard.anonymize(message)
-
-            # Update conversation mapping
-            self._conversation_mapping.update(mapping)
+            anonymized_message, self._conversation_mapping = self.guard.anonymize(
+                message, existing_mapping=self._conversation_mapping
+            )
 
             # Chat with the underlying engine asynchronously
             if hasattr(self.chat_engine, "achat"):
@@ -266,10 +266,9 @@ if LLAMAINDEX_AVAILABLE:
                 Streaming response
             """
             # Anonymize the message
-            anonymized_message, mapping = self.guard.anonymize(message)
-
-            # Update conversation mapping
-            self._conversation_mapping.update(mapping)
+            anonymized_message, self._conversation_mapping = self.guard.anonymize(
+                message, existing_mapping=self._conversation_mapping
+            )
 
             # Stream chat with the underlying engine
             if hasattr(self.chat_engine, "stream_chat"):

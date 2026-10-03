@@ -227,10 +227,11 @@ class ProtectedConversational:
             # Anonymize new messages
             new_messages = []
             for message in conv.iter_texts():
-                anonymized, mapping = self.guard.anonymize(message)
+                # Continue the conversation's mapping so placeholders stay unique
+                anonymized, self._conversation_mappings[conv_id] = self.guard.anonymize(
+                    message, existing_mapping=self._conversation_mappings[conv_id]
+                )
                 new_messages.append(anonymized)
-                # Accumulate mappings across conversation
-                self._conversation_mappings[conv_id].update(mapping)
 
             # Create anonymized conversation
             anonymized_conv = Conversation()

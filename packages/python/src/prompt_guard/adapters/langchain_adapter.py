@@ -156,14 +156,16 @@ if LANGCHAIN_AVAILABLE:
             """
             from langchain.schema import HumanMessage, AIMessage, SystemMessage
 
-            # Anonymize messages
+            # Anonymize messages with one shared mapping so placeholders are
+            # unique across the whole conversation
             anonymized_messages = []
-            mappings = []
+            mapping: Dict[str, str] = {}
 
             for message in messages:
                 content = message.content
-                anonymized_content, mapping = self.guard.anonymize(content)
-                mappings.append(mapping)
+                anonymized_content, mapping = self.guard.anonymize(
+                    content, existing_mapping=mapping
+                )
 
                 # Preserve message type
                 if isinstance(message, HumanMessage):
@@ -185,15 +187,10 @@ if LANGCHAIN_AVAILABLE:
             response = self.chat(anonymized_messages, **kwargs)
 
             # De-anonymize response if enabled
-            if self.deanonymize_response and mappings:
-                # Combine all mappings
-                combined_mapping = {}
-                for mapping in mappings:
-                    combined_mapping.update(mapping)
-
+            if self.deanonymize_response and mapping:
                 if hasattr(response, 'content'):
                     response.content = self.guard.deanonymize(
-                        response.content, combined_mapping
+                        response.content, mapping
                     )
 
             return response
