@@ -6,7 +6,7 @@
 
 ## High-Level Flow
 
-```
+```text
 ┌──────────────┐
 │  User Input  │
 └──────┬───────┘
@@ -213,7 +213,7 @@ guard = PromptGuard(
 | De-anonymization | <1ms |
 | **Total** | **<10ms** |
 
-*Measured on typical prompts (~200 words)*
+Measured on typical prompts (~200 words).
 
 ### Memory
 

@@ -4,7 +4,7 @@ This directory contains evaluation scripts and datasets for measuring the perfor
 
 ## Structure
 
-```
+```text
 eval/
 ├── datasets/           # Labeled test datasets
 │   └── sample_prompts.jsonl

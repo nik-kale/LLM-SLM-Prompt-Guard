@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://pypi.org/project/llm-slm-prompt-guard/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](../../LICENSE)
 
 Python implementation of policy-driven PII detection, anonymization, and de-anonymization for Large Language Model (LLM) and Small Language Model (SLM) applications.
 
@@ -337,7 +337,7 @@ pytest && ruff check src/ && mypy src/
 
 ### Project Structure
 
-```
+```text
 packages/python/
 ├── src/prompt_guard/
 │   ├── __init__.py          # Main exports
@@ -400,9 +400,8 @@ We welcome contributions! See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for
 
 ## Support
 
-- **GitHub Issues**: https://github.com/nik-kale/llm-slm-prompt-guard/issues
-- **Discussions**: https://github.com/nik-kale/llm-slm-prompt-guard/discussions
-- **Documentation**: https://docs.prompt-guard.com (coming soon)
+- **GitHub Issues**: <https://github.com/nik-kale/llm-slm-prompt-guard/issues>
+- **Documentation**: <https://docs.prompt-guard.com> (coming soon)
 
 ---
 

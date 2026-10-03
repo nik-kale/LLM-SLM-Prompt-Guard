@@ -242,7 +242,7 @@ For development/staging (single AZ, smaller instances):
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Internet                                 │
 └────────────────────────┬────────────────────────────────────────┘
@@ -446,9 +446,9 @@ jobs:
 
 ## Support
 
-- **Pulumi Documentation**: https://www.pulumi.com/docs/
-- **GitHub Issues**: https://github.com/nik-kale/llm-slm-prompt-guard/issues
-- **Pulumi Community**: https://slack.pulumi.com/
+- **Pulumi Documentation**: <https://www.pulumi.com/docs/>
+- **GitHub Issues**: <https://github.com/nik-kale/llm-slm-prompt-guard/issues>
+- **Pulumi Community**: <https://slack.pulumi.com/>
 
 ## License
 

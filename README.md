@@ -5,7 +5,7 @@
 [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/nik-kale/llm-slm-prompt-guard/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-100%2B%20passing-success.svg)](#testing)
+[![CI](https://github.com/nik-kale/LLM-SLM-Prompt-Guard/actions/workflows/ci.yml/badge.svg)](https://github.com/nik-kale/LLM-SLM-Prompt-Guard/actions/workflows/ci.yml)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF.svg)](https://github.com/nik-kale/llm-slm-prompt-guard/actions)
 
 `llm-slm-prompt-guard` is a production-ready library that protects sensitive information (PII) in Large Language Model (LLM) and Small Language Model (SLM) applications through policy-driven detection, anonymization, and de-anonymization.
@@ -224,7 +224,7 @@ response = protected.query("What's john@example.com's order status?")
 
 ## 🏗️ Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Your Application                         │
 └───────────────────────────────┬─────────────────────────────────┘
@@ -606,7 +606,7 @@ See [examples/multilanguage_example.py](examples/multilanguage_example.py) for m
 
 - [Python basic](examples/python-fastapi-chat/) - FastAPI integration
 - [Node/Express](examples/node-express-chat/) - Express middleware
-- [Ollama local](examples/ollama-local-chat/) - Local LLM
+- [Ollama local](examples/python-ollama-local/) - Local LLM
 
 ### Advanced Features
 
@@ -732,7 +732,7 @@ We welcome contributions! Here's how to get started:
 ### Areas We Need Help
 
 - 🐛 **Bug fixes** - Check [issues](https://github.com/nik-kale/llm-slm-prompt-guard/issues)
-- ✨ **New features** - See [roadmap](#roadmap)
+- ✨ **New features** - See the [roadmap](docs/roadmap.md)
 - 📚 **Documentation** - Improve guides and examples
 - 🧪 **Testing** - Add test cases and benchmarks
 - 🌍 **Internationalization** - Add language support
@@ -837,8 +837,7 @@ Special thanks to the LLM/SLM community for feedback and contributions!
 
 ### Getting Help
 
-- 📖 **Documentation**: https://docs.prompt-guard.com (coming soon)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/nik-kale/llm-slm-prompt-guard/discussions)
+- 📖 **Documentation**: <https://docs.prompt-guard.com> (coming soon)
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/nik-kale/llm-slm-prompt-guard/issues)
 - 💡 **Feature Requests**: [GitHub Issues](https://github.com/nik-kale/llm-slm-prompt-guard/issues/new?template=feature_request.md)
 
@@ -846,7 +845,7 @@ Special thanks to the LLM/SLM community for feedback and contributions!
 
 - 🌟 **Star us on GitHub** if you find this useful!
 - 🐦 **Follow updates** on Twitter [@promptguard](https://twitter.com/promptguard) (coming soon)
-- 📧 **Email**: support@prompt-guard.com (coming soon)
+- 📧 **Email**: <support@prompt-guard.com> (coming soon)
 
 ---
 
@@ -875,7 +874,7 @@ While still early, llm-slm-prompt-guard is designed for:
 - 🎓 **Education** - Protecting student data
 - 📱 **SaaS** - Multi-tenant AI applications
 
-**Are you using it? Let us know!** Open a [discussion](https://github.com/nik-kale/llm-slm-prompt-guard/discussions) to share your use case.
+**Are you using it? Let us know!** Open an [issue](https://github.com/nik-kale/llm-slm-prompt-guard/issues) to share your use case.
 
 ---
 
@@ -1067,6 +1066,6 @@ python packages/proxy/src/main.py
 
 ---
 
-**Built with ❤️ for the LLM/SLM community**
+Built with ❤️ for the LLM/SLM community.
 
 **Version 1.2.0 | MIT License | [GitHub](https://github.com/nik-kale/llm-slm-prompt-guard)**

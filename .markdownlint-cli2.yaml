@@ -1,0 +1,16 @@
+# markdownlint-cli2 configuration, used by the Lint workflow.
+config:
+  # Prose and tables are not hard-wrapped in this repository.
+  MD013: false
+  # Blank lines around headings, fences and lists are not enforced. The
+  # existing documents do not follow these spacing rules, and applying them
+  # would only add whitespace churn to every document.
+  MD022: false
+  MD031: false
+  MD032: false
+  # Keep a Changelog and the use-case docs repeat sub-headings under
+  # different parents ("### Added", "### Benefits").
+  MD024:
+    siblings_only: true
+ignores:
+  - "**/node_modules/**"

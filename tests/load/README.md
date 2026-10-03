@@ -43,7 +43,7 @@ docker-compose up proxy
 locust -f tests/load/locustfile.py --host=http://localhost:8000
 ```
 
-Then open http://localhost:8089 in your browser.
+Then open <http://localhost:8089> in your browser.
 
 #### Headless Mode (Recommended for CI/CD)
 
@@ -180,7 +180,7 @@ locust -f tests/load/locustfile.py \
 
 **Test**: 50 users, 5 minutes
 
-```
+```text
 Total Requests: 15,234
 Total Failures: 12 (0.08%)
 Failure Rate: 0.08%
@@ -201,7 +201,7 @@ Throughput: 508 req/s
 
 **Test**: 50 users, 5 minutes
 
-```
+```text
 Total Requests: 18,456
 Total Failures: 3 (0.02%)
 Failure Rate: 0.02%
@@ -222,7 +222,7 @@ Throughput: 1,847 req/s
 
 **Test**: 100 users, 10 minutes
 
-```
+```text
 Total Requests: 28,943
 Total Failures: 87 (0.30%)
 Failure Rate: 0.30%
@@ -243,7 +243,7 @@ Throughput: 482 req/s
 
 **Pattern**: 10 users → 100 users (3 spikes)
 
-```
+```text
 Normal Load (10 users):
   Average: 45ms
   P95: 89ms
@@ -263,7 +263,7 @@ Recovery Time: <5 seconds
 
 **Test**: 30 users, 24 hours
 
-```
+```text
 Total Requests: 2,547,892
 Total Failures: 1,234 (0.05%)
 Failure Rate: 0.05%
@@ -478,7 +478,7 @@ jobs:
 
 Load test results are stored in `reports/` directory:
 
-```
+```text
 reports/
 ├── light-load-2025-11-17.html
 ├── medium-load-2025-11-17.html
@@ -497,12 +497,12 @@ reports/
 
 ## Resources
 
-- **Locust Documentation**: https://docs.locust.io/
-- **Performance Testing Guide**: https://web.dev/performance/
-- **AWS Load Testing**: https://aws.amazon.com/solutions/implementations/distributed-load-testing-on-aws/
+- **Locust Documentation**: <https://docs.locust.io/>
+- **Performance Testing Guide**: <https://web.dev/performance/>
+- **AWS Load Testing**: <https://aws.amazon.com/solutions/implementations/distributed-load-testing-on-aws/>
 
 ## Support
 
 For questions or issues:
-- **GitHub Issues**: https://github.com/nik-kale/llm-slm-prompt-guard/issues
-- **Documentation**: https://docs.prompt-guard.com
+- **GitHub Issues**: <https://github.com/nik-kale/llm-slm-prompt-guard/issues>
+- **Documentation**: <https://docs.prompt-guard.com>

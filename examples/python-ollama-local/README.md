@@ -48,7 +48,7 @@ python main.py --mode interactive
 ```
 
 Example session:
-```
+```text
 You: Hi, I'm John Smith and my email is john.smith@example.com
 [PII Protected: 2 items]
 [Anonymized: Hi, I'm [USER_1] and my email is [EMAIL_1]]
@@ -69,7 +69,7 @@ python main.py --mode batch
 ```
 
 Output:
-```
+```text
 1. Original:   Contact me at alice@example.com
    Anonymized: Contact me at [EMAIL_1]
    PII Found:  1 item(s)
@@ -91,7 +91,7 @@ python main.py --mode performance
 ```
 
 Expected output:
-```
+```text
 Iterations: 1000
 Total time: 450.23ms
 Average time per anonymization: 0.450ms
