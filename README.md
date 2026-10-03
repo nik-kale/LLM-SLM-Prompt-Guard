@@ -21,9 +21,9 @@ from prompt_guard import PromptGuard
 guard = PromptGuard(policy="default_pii")
 
 # Anonymize text containing PII
-text = "Contact John Smith at john@example.com or call 555-123-4567"
+text = "Please contact John Smith at john@example.com or call 555-123-4567"
 anonymized, mapping = guard.anonymize(text)
-# Output: "Contact [PERSON_1] at [EMAIL_1] or call [PHONE_1]"
+# Output: "Please contact [NAME_1] at [EMAIL_1] or call [PHONE_1]"
 
 # Send anonymized text to LLM...
 response = llm.chat(anonymized)
@@ -180,9 +180,12 @@ logger.log_detection(session_id, "doctor_123", pii_types=["SSN", "MRN"], count=l
 ```python
 guard = PromptGuard(policy="pci_dss")
 
-payment_info = "Card: 4532-1234-5678-9010, CVV: 123"
+payment_info = "Card: 4532-1234-5678-9010"
 anonymized, mapping = guard.anonymize(payment_info)
-# CVV never stored, card number truncated
+# "Card: [PAN_1]"
+# Entities that pci_dss marks storage_allowed: false (CVV, PIN, stripe data)
+# are redacted without being written to the mapping. The bundled detectors
+# do not recognise CVVs, so add a custom detector for them.
 ```
 
 ### 4. Zero-Code HTTP Proxy
@@ -286,13 +289,14 @@ pytest packages/python/tests/
 ```
 
 **Test Suite**:
-- ✅ **100+ test cases** across integration, performance, security
-- ✅ **Integration tests**: LangChain, LlamaIndex, async, caching
+- ✅ **Unit tests**: detection, overlap resolution, placeholder mapping, anonymizers, CLI
+- ✅ **Integration tests**: async, caching, policies (LangChain and Redis tests run when installed/available)
 - ✅ **Performance benchmarks**: Detector speed, throughput, memory
 - ✅ **Security tests**: ReDoS, injection, data leakage
-- ✅ **Load tests**: Locust suite with baseline results
+- ✅ **Proxy tests**: request anonymization, rate limiting (`packages/proxy/tests`)
+- ✅ **Load tests**: Locust suite, run manually against a proxy with provider credentials
 
-**Coverage**: 85%+ (estimated)
+Coverage is reported by the CI workflow.
 
 ### Load Testing
 
@@ -329,8 +333,8 @@ locust -f tests/load/locustfile.py \
 ### Build Documentation Locally
 
 ```bash
+pip install -r docs/requirements.txt -e packages/python
 cd docs
-pip install -r requirements.txt
 make html
 # Open docs/_build/html/index.html
 ```
@@ -398,6 +402,13 @@ docker run -p 8000:8000 \
   prompt-guard-proxy
 ```
 
+The proxy reads `PORT`, `HOST`, `REDIS_URL`, `POLICY`, `DETECTORS`,
+`RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_HOUR`, `RATE_LIMIT_BURST` and
+`TRUSTED_IPS` from the environment. Rate limits always apply per client IP;
+an `X-User-ID` header adds a per-user limit but never replaces the IP limit.
+Behind a load balancer, start uvicorn with `--proxy-headers` and
+`--forwarded-allow-ips` so the client IP is the real one.
+
 ### Docker Compose
 
 ```bash
@@ -436,6 +447,10 @@ This deploys:
 See [deploy/helm/prompt-guard/README.md](deploy/helm/prompt-guard/README.md) for details.
 
 ### AWS with Terraform
+
+> **Note:** `deploy/terraform/main.tf` calls the modules `./modules/vpc`,
+> `./modules/rds`, `./modules/elasticache` and `./modules/ecs`, which are not
+> in the repository yet, so `terraform init` fails until they are added.
 
 ```bash
 cd deploy/terraform
@@ -532,13 +547,13 @@ from prompt_guard import PromptGuard
 from prompt_guard.cache import InMemoryCache, RedisCache, CachedPromptGuard
 
 # In-memory cache
-cache = InMemoryCache(max_size=10000, ttl=3600)
+cache = InMemoryCache(max_size=10000)
 guard = PromptGuard(policy="default_pii")
-cached_guard = CachedPromptGuard(guard, cache)
+cached_guard = CachedPromptGuard(guard, cache, ttl=3600)
 
 # Redis cache (distributed)
-cache = RedisCache(redis_url="redis://localhost:6379", ttl=3600)
-cached_guard = CachedPromptGuard(guard, cache)
+cache = RedisCache(redis_url="redis://localhost:6379", default_ttl=3600)
+cached_guard = CachedPromptGuard(guard, cache, ttl=3600)
 ```
 
 ### Storage
@@ -578,15 +593,15 @@ stats = logger.get_detection_stats(start_time=..., end_time=...)
 from prompt_guard.detectors import SpacyDetector
 
 # Spanish
-spacy_es = SpacyDetector(model="es_core_news_sm", language="es")
+spacy_es = SpacyDetector(model="es_core_news_sm")
 guard = PromptGuard(detectors=[spacy_es])
 
 # French
-spacy_fr = SpacyDetector(model="fr_core_news_sm", language="fr")
+spacy_fr = SpacyDetector(model="fr_core_news_sm")
 guard = PromptGuard(detectors=[spacy_fr])
 
 # German
-spacy_de = SpacyDetector(model="de_core_news_sm", language="de")
+spacy_de = SpacyDetector(model="de_core_news_sm")
 guard = PromptGuard(detectors=[spacy_de])
 
 # Or use Presidio for 50+ languages
@@ -673,11 +688,12 @@ See [examples/multilanguage_example.py](examples/multilanguage_example.py) for m
 
 We use GitHub Actions for continuous integration and deployment:
 
-#### Test Workflow
-- **Multi-version testing**: Python 3.9, 3.10, 3.11, 3.12
-- **Integration tests**: All adapters and storage backends
-- **Performance benchmarks**: Regression detection
-- **Load testing**: Locust-based stress tests with Redis
+#### CI Workflow
+- **Multi-version testing**: Python 3.9, 3.10, 3.11, 3.12, 3.13
+- **Library and proxy tests**: unit, integration, security
+- **Package check**: builds the wheel and smoke-tests it in a clean environment
+- **Performance benchmarks**: results uploaded as an artifact
+- **Node build, evaluation scripts and examples**
 
 #### Lint Workflow
 - **Python linting**: Ruff and MyPy for code quality
@@ -709,15 +725,16 @@ We use GitHub Actions for continuous integration and deployment:
 
 ```bash
 # Run tests like CI
-pytest packages/python/tests/
+pip install -e "packages/python[dev,proxy,faker,cryptography]"
+(cd packages/python && pytest tests/unit tests/integration tests/security)
+(cd packages/proxy && pytest tests)
 
 # Run linting like CI
-ruff check .
-mypy packages/python/src/
+(cd packages/python && ruff check src/ tests/ ../proxy/ && mypy src/ --ignore-missing-imports)
 
 # Run security checks like CI
-bandit -r packages/python/src/
-pip-audit
+bandit -c .bandit.yml -r packages/python/src packages/proxy/src
+pip-audit --skip-editable
 
 # Run pre-commit hooks (all checks)
 pre-commit run --all-files
@@ -852,14 +869,14 @@ Special thanks to the LLM/SLM community for feedback and contributions!
 ## 📈 Project Stats
 
 - **Version**: 1.2.0
-- **Test Coverage**: 85%+
+- **Test Coverage**: reported by CI
 - **Test Cases**: 100+
 - **Lines of Code**: ~10,000+ (including infrastructure)
 - **Performance**: 500+ req/s (single instance), 2,000+ req/s (with cache)
 - **Supported Languages**: 10+
 - **Framework Integrations**: 4+ (LangChain, LlamaIndex, Hugging Face, Vercel AI)
 - **Deployment Options**: 6 (Docker, Helm/K8s, Terraform, Pulumi, Docker Compose, Manual)
-- **CI/CD Workflows**: 5 (Test, Lint, Security, Docs, Release)
+- **CI/CD Workflows**: 5 (CI, Lint, Security, Docs, Release)
 
 ---
 
@@ -928,7 +945,7 @@ prompt-guard anonymize --file input.txt --output anonymized.txt
 prompt-guard anonymize --file input.txt --output anon.txt --mapping-output mapping.json
 
 # JSON output
-prompt-guard anonymize "Contact me at 555-1234" --json-output
+prompt-guard anonymize "Contact me at 555-123-4567" --json-output
 ```
 
 #### De-anonymize Text
@@ -937,7 +954,7 @@ Restore original PII from anonymized text:
 
 ```bash
 # De-anonymize using mapping file
-prompt-guard deanonymize "Contact [PERSON_1] at [EMAIL_1]" --mapping mapping.json
+prompt-guard deanonymize "Contact [NAME_1] at [EMAIL_1]" --mapping mapping.json
 
 # From file
 prompt-guard deanonymize --file anonymized.txt --mapping mapping.json --output original.txt
@@ -1024,7 +1041,7 @@ echo "SSN: 123-45-6789" | prompt-guard anonymize
 # Output: SSN: [SSN_1]
 
 # Check what entities are detected
-echo "Call 555-1234 or email test@example.com" | prompt-guard detect
+echo "Call 555-123-4567 or email test@example.com" | prompt-guard detect
 # Output shows: PHONE and EMAIL entities
 ```
 

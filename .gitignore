@@ -19,9 +19,8 @@ htmlcov/
 .benchmarks/
 benchmark-results.json
 
-# Generated output
+# Build and evaluation output
 docs/_build/
-docs/api/generated/
 eval/results/
 
 # Node
