@@ -2,21 +2,28 @@
 Hash-based anonymization for analytics use cases.
 """
 
-import hashlib
+import hmac
+import secrets
 from typing import Dict, Optional
 from .base import BaseAnonymizer
 
 
 class HashAnonymizer(BaseAnonymizer):
     """
-    Anonymizer that replaces PII with cryptographic hashes.
+    Anonymizer that replaces PII with keyed hashes (HMAC).
     
     Features:
-    - Preserves uniqueness (same input → same hash)
+    - Preserves uniqueness (same input and key → same hash)
     - Suitable for analytics and aggregation
-    - One-way transformation (cannot reverse without rainbow tables)
-    - Optional salt for additional security
-    - Multiple hash algorithms (SHA256, SHA512, MD5)
+    - One-way: values are hashed with HMAC under a secret key, so a hash
+      cannot be reversed by hashing candidate values without the key.
+      A plain or publicly salted hash of low-entropy PII (phone numbers,
+      SSNs, dates of birth) can be reversed by hashing every possible value.
+    - SHA-256 or SHA-512
+
+    Pass the same ``salt`` to get the same hashes in different processes.
+    Without it, each instance uses a random key, so hashes are only
+    comparable within that instance.
     """
     
     def __init__(
@@ -29,19 +36,23 @@ class HashAnonymizer(BaseAnonymizer):
         Initialize hash anonymizer.
         
         Args:
-            algorithm: Hash algorithm ("sha256", "sha512", "md5")
-            salt: Optional salt to add to values before hashing
+            algorithm: Hash algorithm ("sha256" or "sha512")
+            salt: Secret used as the HMAC key. Treat it like a password: anyone
+                who has it can confirm guesses of the original values. If
+                omitted or empty, a random 256-bit key is generated.
             truncate: Optional number of characters to keep from hash
         """
         self.algorithm = algorithm.lower()
         self.salt = salt or ""
         self.truncate = truncate
         
-        if self.algorithm not in ("sha256", "sha512", "md5"):
+        if self.algorithm not in ("sha256", "sha512"):
             raise ValueError(
                 f"Unsupported algorithm: {algorithm}. "
-                "Supported: sha256, sha512, md5"
+                "Supported: sha256, sha512"
             )
+
+        self._key = self.salt.encode("utf-8") if self.salt else secrets.token_bytes(32)
         
         self._mapping: Dict[str, str] = {}
         self._hashed_to_original: Dict[str, str] = {}
@@ -53,7 +64,7 @@ class HashAnonymizer(BaseAnonymizer):
         entity_index: int,
     ) -> str:
         """
-        Replace entity with its hash.
+        Replace entity with its keyed hash.
         
         Args:
             entity_type: Type of PII entity
@@ -63,17 +74,9 @@ class HashAnonymizer(BaseAnonymizer):
         Returns:
             Hashed value
         """
-        # Compute hash
-        salted_value = f"{self.salt}{original_value}".encode('utf-8')
-        
-        if self.algorithm == "sha256":
-            hash_obj = hashlib.sha256(salted_value)
-        elif self.algorithm == "sha512":
-            hash_obj = hashlib.sha512(salted_value)
-        else:  # md5
-            hash_obj = hashlib.md5(salted_value)
-        
-        hashed = hash_obj.hexdigest()
+        hashed = hmac.new(
+            self._key, original_value.encode("utf-8"), self.algorithm
+        ).hexdigest()
         
         # Truncate if requested
         if self.truncate:
