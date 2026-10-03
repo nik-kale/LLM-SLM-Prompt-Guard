@@ -42,7 +42,7 @@ class TestCli:
         anonymized_file = tmp_path / "anon.txt"
         restored_file = tmp_path / "restored.txt"
         restored_file.write_text("stale")
-        os.chmod(restored_file, 0o644)
+        os.chmod(restored_file, 0o640)
         runner = CliRunner()
 
         result = runner.invoke(
