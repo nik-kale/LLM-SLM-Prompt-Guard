@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Test, coverage and tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.benchmarks/
+benchmark-results.json
+
+# Generated output
+docs/_build/
+docs/api/generated/
+eval/results/
+
+# Node
+node_modules/
+packages/node/dist/
+examples/node-express-chat/dist/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store

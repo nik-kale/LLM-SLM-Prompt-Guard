@@ -5,6 +5,8 @@ Provides seamless integration with LangChain LLMs and chains,
 automatically anonymizing prompts and de-anonymizing responses.
 """
 
+from __future__ import annotations
+
 from typing import Any, List, Optional, Dict, Mapping as TypeMapping
 import logging
 

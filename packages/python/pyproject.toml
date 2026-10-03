@@ -119,6 +119,9 @@ prompt-guard = "prompt_guard.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+prompt_guard = ["policies/*.yaml"]
+
 [tool.black]
 line-length = 100
 target-version = ["py39", "py310", "py311"]

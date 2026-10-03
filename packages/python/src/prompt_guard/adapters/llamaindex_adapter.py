@@ -5,6 +5,8 @@ Provides seamless integration with LlamaIndex query engines and chat engines,
 automatically anonymizing queries and de-anonymizing responses.
 """
 
+from __future__ import annotations
+
 from typing import Any, List, Optional, Dict
 import logging
 
