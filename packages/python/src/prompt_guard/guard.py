@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Dict, Tuple, Any, Optional
+from typing import List, Dict, Tuple, Any, Optional, Callable
 import yaml
 import pathlib
 
@@ -13,7 +13,16 @@ from .types import (
     DetectionReport,
     OverlapStrategy,
 )
-from .report import generate_detection_report
+from .report import generate_detection_report, HIGH_RISK_ENTITIES, MEDIUM_RISK_ENTITIES
+
+
+def _risk_rank(entity_type: str) -> int:
+    """Rank entity types by sensitivity, used to break ties between overlaps."""
+    if entity_type in HIGH_RISK_ENTITIES:
+        return 2
+    if entity_type in MEDIUM_RISK_ENTITIES:
+        return 1
+    return 0
 
 
 class PromptGuard:
@@ -89,123 +98,142 @@ class PromptGuard:
         with policy_path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f)
 
-    def _resolve_overlaps(self, results: List[DetectorResult]) -> List[DetectorResult]:
+    def _resolve_overlaps(
+        self,
+        results: List[DetectorResult],
+        text: Optional[str] = None,
+    ) -> List[DetectorResult]:
         """
         Resolve overlapping entity detections based on configured strategy.
-        
+
+        Overlapping detections are grouped into clusters. The strategy decides
+        which detection in a cluster supplies the entity type and confidence,
+        and the resolved entity spans the whole cluster, so no character that
+        any detector flagged is left in the output.
+
         Args:
             results: List of detected entities (may contain overlaps)
-        
+            text: Original text, used to fill in the text of widened entities
+
         Returns:
-            List of non-overlapping entities
+            List of non-overlapping entities sorted by start position
         """
         if not results:
-            return results
-        
-        # Sort by start position
-        sorted_results = sorted(results, key=lambda r: (r.start, r.end))
-        
-        if self.overlap_strategy == OverlapStrategy.LONGEST_MATCH:
-            return self._resolve_by_longest(sorted_results)
-        elif self.overlap_strategy == OverlapStrategy.HIGHEST_CONFIDENCE:
-            return self._resolve_by_confidence(sorted_results)
-        elif self.overlap_strategy == OverlapStrategy.FIRST_DETECTOR:
-            return self._resolve_by_order(sorted_results)
-        elif self.overlap_strategy == OverlapStrategy.MERGE_SAME_TYPE:
-            return self._resolve_by_merge(sorted_results)
-        else:
-            return self._resolve_by_longest(sorted_results)  # Default
-    
+            return []
+
+        indexed = list(enumerate(results))
+        if self.overlap_strategy == OverlapStrategy.MERGE_SAME_TYPE:
+            indexed = self._merge_same_type(indexed)
+
+        rank = self._cluster_rank_key()
+        indexed.sort(key=lambda item: (item[1].start, item[1].end))
+
+        resolved: List[DetectorResult] = []
+        cluster = [indexed[0]]
+        cluster_end = indexed[0][1].end
+        for item in indexed[1:]:
+            if item[1].start < cluster_end:
+                cluster.append(item)
+                cluster_end = max(cluster_end, item[1].end)
+            else:
+                resolved.append(self._collapse_cluster(cluster, rank, text))
+                cluster = [item]
+                cluster_end = item[1].end
+        resolved.append(self._collapse_cluster(cluster, rank, text))
+        return resolved
+
     def _has_overlap(self, r1: DetectorResult, r2: DetectorResult) -> bool:
         """Check if two detection results overlap."""
         return not (r1.end <= r2.start or r2.end <= r1.start)
-    
-    def _resolve_by_longest(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Keep longest span when entities overlap."""
-        filtered = []
-        for result in results:
-            # Check if this result overlaps with any already accepted result
-            overlaps = False
-            for accepted in filtered:
-                if self._has_overlap(result, accepted):
-                    # Keep the longer one
-                    if (result.end - result.start) > (accepted.end - accepted.start):
-                        filtered.remove(accepted)
-                        filtered.append(result)
-                    overlaps = True
-                    break
-            
-            if not overlaps:
-                filtered.append(result)
-        
-        return filtered
-    
-    def _resolve_by_confidence(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Keep highest confidence detection when entities overlap."""
-        filtered = []
-        for result in results:
-            overlaps = False
-            for accepted in filtered:
-                if self._has_overlap(result, accepted):
-                    # Compare confidence scores (treat None as 1.0)
-                    result_conf = result.confidence if result.confidence is not None else 1.0
-                    accepted_conf = accepted.confidence if accepted.confidence is not None else 1.0
-                    
-                    if result_conf > accepted_conf:
-                        filtered.remove(accepted)
-                        filtered.append(result)
-                    overlaps = True
-                    break
-            
-            if not overlaps:
-                filtered.append(result)
-        
-        return filtered
-    
-    def _resolve_by_order(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Keep first detection when entities overlap (detector order priority)."""
-        filtered = []
-        for result in results:
-            # Check if this result overlaps with any already accepted result
-            has_overlap = any(self._has_overlap(result, accepted) for accepted in filtered)
-            if not has_overlap:
-                filtered.append(result)
-        
-        return filtered
-    
-    def _resolve_by_merge(self, results: List[DetectorResult]) -> List[DetectorResult]:
-        """Merge overlapping entities of the same type."""
-        filtered = []
-        for result in results:
-            merged = False
-            for i, accepted in enumerate(filtered):
-                if (self._has_overlap(result, accepted) and 
-                    result.entity_type == accepted.entity_type):
-                    # Merge: take span from start of first to end of last
-                    merged_start = min(result.start, accepted.start)
-                    merged_end = max(result.end, accepted.end)
-                    # Use average confidence if both have it
-                    if result.confidence and accepted.confidence:
-                        merged_conf = (result.confidence + accepted.confidence) / 2
-                    else:
-                        merged_conf = result.confidence or accepted.confidence
-                    
-                    # Create merged result
-                    merged_result = DetectorResult(
-                        entity_type=result.entity_type,
-                        start=merged_start,
-                        end=merged_end,
-                        text="",  # Will be filled during anonymization
-                        confidence=merged_conf,
+
+    def _cluster_rank_key(self) -> Callable[[Tuple[int, DetectorResult]], Tuple[float, ...]]:
+        """
+        Return the sort key that orders a cluster's detections best-first.
+
+        Items are (detector order index, result) pairs. Ties on length are
+        broken in favour of the higher-risk entity type, so an SSN that a
+        broad phone pattern also matches is labelled as an SSN.
+        """
+
+        def length(r: DetectorResult) -> int:
+            return r.end - r.start
+
+        def confidence(r: DetectorResult) -> float:
+            return r.confidence if r.confidence is not None else 1.0
+
+        if self.overlap_strategy == OverlapStrategy.HIGHEST_CONFIDENCE:
+            return lambda item: (
+                -confidence(item[1]),
+                -length(item[1]),
+                -_risk_rank(item[1].entity_type),
+                item[0],
+            )
+        if self.overlap_strategy == OverlapStrategy.FIRST_DETECTOR:
+            return lambda item: (item[0],)
+        # LONGEST_MATCH, and MERGE_SAME_TYPE for overlaps across types
+        return lambda item: (-length(item[1]), -_risk_rank(item[1].entity_type), item[0])
+
+    @staticmethod
+    def _collapse_cluster(
+        cluster: List[Tuple[int, DetectorResult]],
+        rank: Callable[[Tuple[int, DetectorResult]], Tuple[float, ...]],
+        text: Optional[str],
+    ) -> DetectorResult:
+        """Reduce a cluster of overlapping detections to one entity covering all of them."""
+        winner = min(cluster, key=rank)[1]
+        start = min(r.start for _, r in cluster)
+        end = max(r.end for _, r in cluster)
+        if start == winner.start and end == winner.end and (winner.text or text is None):
+            return winner
+        return DetectorResult(
+            entity_type=winner.entity_type,
+            start=start,
+            end=end,
+            text=text[start:end] if text is not None else winner.text,
+            confidence=winner.confidence,
+        )
+
+    @staticmethod
+    def _merge_same_type(
+        indexed: List[Tuple[int, DetectorResult]],
+    ) -> List[Tuple[int, DetectorResult]]:
+        """Merge overlapping detections of the same entity type into single spans."""
+        by_type: Dict[str, List[Tuple[int, DetectorResult]]] = {}
+        for item in indexed:
+            by_type.setdefault(item[1].entity_type, []).append(item)
+
+        merged: List[Tuple[int, DetectorResult]] = []
+        for entity_type, items in by_type.items():
+            items.sort(key=lambda item: (item[1].start, item[1].end))
+            groups: List[List[Tuple[int, DetectorResult]]] = []
+            group_end = 0
+            for item in items:
+                if groups and item[1].start < group_end:
+                    groups[-1].append(item)
+                    group_end = max(group_end, item[1].end)
+                else:
+                    groups.append([item])
+                    group_end = item[1].end
+
+            for group in groups:
+                if len(group) == 1:
+                    merged.append(group[0])
+                    continue
+                scores = [r.confidence for _, r in group if r.confidence is not None]
+                merged.append(
+                    (
+                        min(i for i, _ in group),
+                        DetectorResult(
+                            entity_type=entity_type,
+                            start=min(r.start for _, r in group),
+                            end=max(r.end for _, r in group),
+                            text="",  # filled in from the source text when resolved
+                            confidence=sum(scores) / len(scores) if scores else None,
+                        ),
                     )
-                    filtered[i] = merged_result
-                    merged = True
-                    break
-            
-            if not merged:
-                filtered.append(result)
-        
-        return filtered
+                )
+        merged.sort(key=lambda item: item[0])
+        return merged
 
     def anonymize(
         self,
@@ -243,13 +271,17 @@ class PromptGuard:
                 if r.confidence is None or r.confidence >= options.min_confidence
             ]
 
-        # Resolve overlapping entities
-        all_results = self._resolve_overlaps(all_results)
-
-        # Sort by start index so replacements are stable
-        all_results.sort(key=lambda r: r.start)
-
         policy_entities = self.policy.get("entities", {})
+
+        # Only entity types the policy redacts take part in overlap resolution.
+        # Otherwise an unconfigured type (e.g. a PHONE match over an SSN under a
+        # policy without PHONE) could win the overlap and then be skipped,
+        # leaving the configured entity in the output.
+        all_results = [r for r in all_results if policy_entities.get(r.entity_type)]
+
+        # Resolve overlapping entities (result is sorted by start index)
+        all_results = self._resolve_overlaps(all_results, text)
+
         mapping: Mapping = {}
         anonymized = []
         last_idx = 0
@@ -258,9 +290,7 @@ class PromptGuard:
         counters: Dict[str, int] = {}
 
         for res in all_results:
-            entity_cfg = policy_entities.get(res.entity_type)
-            if not entity_cfg:
-                continue  # skip unconfigured entity types
+            entity_cfg = policy_entities[res.entity_type]
 
             # Add text before this entity
             anonymized.append(text[last_idx : res.start])
@@ -274,7 +304,7 @@ class PromptGuard:
             placeholder = placeholder_tpl.format(i=i)
 
             anonymized.append(placeholder)
-            mapping[placeholder] = res.text
+            mapping[placeholder] = text[res.start : res.end]
 
             last_idx = res.end
 
