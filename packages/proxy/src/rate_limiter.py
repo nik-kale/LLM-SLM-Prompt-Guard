@@ -1,7 +1,8 @@
 """
-Rate limiting implementation using token bucket algorithm with Redis backend.
+Rate limiting implementation using fixed-window counters with a Redis backend.
 """
 
+import math
 import time
 import hashlib
 from typing import Optional, Set
@@ -14,7 +15,7 @@ class RateLimitConfig:
     """Configuration for rate limiting."""
     requests_per_minute: int = 60
     requests_per_hour: int = 1000
-    burst_size: int = 10  # Allow burst requests
+    burst_size: int = 10  # Extra requests allowed on top of each window's limit
     trusted_ips: Set[str] = None  # IPs that bypass rate limiting
     
     def __post_init__(self):
@@ -34,20 +35,26 @@ class RateLimitExceeded(Exception):
 
 class TokenBucketRateLimiter:
     """
-    Token bucket rate limiter with Redis backend.
-    
+    Per-client rate limiter backed by Redis.
+
+    Despite the name, each limit is a fixed-window counter: requests are
+    counted per minute and per hour window, and a request is rejected once
+    a window's count exceeds its limit plus ``burst_size``. Counting is a
+    single atomic INCR per window, so concurrent requests from several proxy
+    workers cannot overshoot the limit, and every counter key expires with
+    its window.
+
     Supports:
-    - Per-IP rate limiting
-    - Per-user rate limiting (via X-User-ID header)
-    - Global rate limiting
-    - Burst allowance
+    - Per-IP rate limiting (always applied, using the connection address)
+    - An additional per-user limit when an X-User-ID header is present
     - Trusted IP bypass
-    
-    The token bucket algorithm works by:
-    1. Maintaining a bucket with a maximum capacity of tokens
-    2. Tokens are added at a constant rate
-    3. Each request consumes one token
-    4. If no tokens available, request is rejected
+
+    X-User-ID is supplied by the client, so it never replaces the IP limit:
+    otherwise a caller could send a new value with every request and never
+    be limited. If the proxy runs behind a load balancer, configure the ASGI
+    server to take the client address from the trusted forwarding headers
+    (e.g. uvicorn ``--proxy-headers --forwarded-allow-ips``), or all clients
+    will share the balancer's address.
     """
     
     def __init__(self, redis_client: redis.Redis, config: RateLimitConfig):
@@ -63,18 +70,31 @@ class TokenBucketRateLimiter:
         
     def _get_key(self, identifier: str, window: str) -> str:
         """
-        Generate Redis key for rate limit tracking.
+        Generate Redis key prefix for rate limit tracking.
         
         Args:
-            identifier: IP address or user ID
+            identifier: Namespaced identifier, e.g. "ip:10.0.0.1" or "user:alice"
             window: Time window ('minute' or 'hour')
         
         Returns:
-            Redis key
+            Redis key prefix (the window number is appended per window)
         """
         # Hash the identifier for privacy
         hashed = hashlib.sha256(identifier.encode()).hexdigest()[:16]
         return f"ratelimit:{window}:{hashed}"
+
+    @staticmethod
+    def _identifiers(client_ip: str, user_id: Optional[str]) -> list:
+        identifiers = [f"ip:{client_ip}"]
+        if user_id:
+            identifiers.append(f"user:{user_id}")
+        return identifiers
+
+    def _windows(self):
+        return (
+            ("minute", self.config.requests_per_minute, 60),
+            ("hour", self.config.requests_per_hour, 3600),
+        )
     
     def check_rate_limit(
         self,
@@ -95,24 +115,9 @@ class TokenBucketRateLimiter:
         if client_ip in self.config.trusted_ips:
             return
         
-        # Determine identifier (prefer user_id over IP)
-        identifier = user_id if user_id else client_ip
-        
-        # Check per-minute limit
-        self._check_window(
-            identifier,
-            "minute",
-            self.config.requests_per_minute,
-            60,
-        )
-        
-        # Check per-hour limit
-        self._check_window(
-            identifier,
-            "hour",
-            self.config.requests_per_hour,
-            3600,
-        )
+        for identifier in self._identifiers(client_ip, user_id):
+            for window, max_requests, window_seconds in self._windows():
+                self._check_window(identifier, window, max_requests, window_seconds)
     
     def _check_window(
         self,
@@ -122,10 +127,10 @@ class TokenBucketRateLimiter:
         window_seconds: int,
     ) -> None:
         """
-        Check rate limit for a specific time window.
+        Count this request in the current window and reject it if over the limit.
         
         Args:
-            identifier: IP or user ID
+            identifier: Namespaced IP or user identifier
             window: Window name ('minute' or 'hour')
             max_requests: Maximum requests allowed in window
             window_seconds: Window duration in seconds
@@ -133,42 +138,21 @@ class TokenBucketRateLimiter:
         Raises:
             RateLimitExceeded: If limit exceeded
         """
-        key = self._get_key(identifier, window)
-        current_time = time.time()
-        
-        # Get current request count and window start
-        pipe = self.redis.pipeline()
-        pipe.get(f"{key}:count")
-        pipe.get(f"{key}:start")
-        results = pipe.execute()
-        
-        current_count = int(results[0]) if results[0] else 0
-        window_start = float(results[1]) if results[1] else current_time
-        
-        # Check if window has expired
-        if current_time - window_start >= window_seconds:
-            # Reset window
-            pipe = self.redis.pipeline()
-            pipe.set(f"{key}:count", 1, ex=window_seconds)
-            pipe.set(f"{key}:start", current_time, ex=window_seconds)
-            pipe.execute()
-            return
-        
-        # Check if burst allowance can be used
-        if current_count < max_requests + self.config.burst_size:
-            # Increment counter
-            pipe = self.redis.pipeline()
-            pipe.incr(f"{key}:count")
-            pipe.expire(f"{key}:count", window_seconds)
-            pipe.execute()
-            return
-        
-        # Rate limit exceeded
-        time_remaining = int(window_seconds - (current_time - window_start))
-        raise RateLimitExceeded(
-            retry_after=time_remaining,
-            limit_type=window,
-        )
+        now = time.time()
+        window_index = int(now // window_seconds)
+        key = f"{self._get_key(identifier, window)}:{window_index}"
+
+        pipe = self.redis.pipeline(transaction=True)
+        pipe.incr(key)
+        pipe.expire(key, window_seconds + 1)
+        count, _ = pipe.execute()
+
+        if int(count) > max_requests + self.config.burst_size:
+            retry_after = max(1, math.ceil((window_index + 1) * window_seconds - now))
+            raise RateLimitExceeded(
+                retry_after=retry_after,
+                limit_type=window,
+            )
     
     def get_remaining(
         self,
@@ -185,31 +169,20 @@ class TokenBucketRateLimiter:
         Returns:
             Dictionary with remaining requests per window
         """
-        identifier = user_id if user_id else client_ip
-        
-        minute_key = self._get_key(identifier, "minute")
-        hour_key = self._get_key(identifier, "hour")
-        
-        pipe = self.redis.pipeline()
-        pipe.get(f"{minute_key}:count")
-        pipe.get(f"{hour_key}:count")
-        results = pipe.execute()
-        
-        minute_count = int(results[0]) if results[0] else 0
-        hour_count = int(results[1]) if results[1] else 0
-        
-        return {
-            "minute": {
-                "limit": self.config.requests_per_minute,
-                "used": minute_count,
-                "remaining": max(0, self.config.requests_per_minute - minute_count),
-            },
-            "hour": {
-                "limit": self.config.requests_per_hour,
-                "used": hour_count,
-                "remaining": max(0, self.config.requests_per_hour - hour_count),
-            },
-        }
+        now = time.time()
+        status = {}
+        for window, max_requests, window_seconds in self._windows():
+            window_index = int(now // window_seconds)
+            pipe = self.redis.pipeline()
+            for identifier in self._identifiers(client_ip, user_id):
+                pipe.get(f"{self._get_key(identifier, window)}:{window_index}")
+            used = max(int(count) if count else 0 for count in pipe.execute())
+            status[window] = {
+                "limit": max_requests,
+                "used": used,
+                "remaining": max(0, max_requests - used),
+            }
+        return status
     
     def reset(self, identifier: str) -> None:
         """
@@ -218,9 +191,13 @@ class TokenBucketRateLimiter:
         Args:
             identifier: IP address or user ID to reset
         """
-        for window in ["minute", "hour"]:
-            key = self._get_key(identifier, window)
-            self.redis.delete(f"{key}:count", f"{key}:start")
+        now = time.time()
+        keys = []
+        for window, _, window_seconds in self._windows():
+            window_index = int(now // window_seconds)
+            for namespaced in (f"ip:{identifier}", f"user:{identifier}"):
+                keys.append(f"{self._get_key(namespaced, window)}:{window_index}")
+        self.redis.delete(*keys)
 
 
 class GlobalRateLimiter:
@@ -258,10 +235,12 @@ class GlobalRateLimiter:
         # Use current second as key
         second_key = f"{key}:{current_time}"
         
-        count = self.redis.incr(second_key)
-        self.redis.expire(second_key, 2)  # Keep for 2 seconds
+        pipe = self.redis.pipeline(transaction=True)
+        pipe.incr(second_key)
+        pipe.expire(second_key, 2)  # Keep for 2 seconds
+        count, _ = pipe.execute()
         
-        if count > self.max_requests:
+        if int(count) > self.max_requests:
             raise RateLimitExceeded(
                 retry_after=1,
                 limit_type="global",
